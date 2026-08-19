@@ -68,7 +68,7 @@ from ultralytics import YOLO
 from vision.base import VisionProcessor, VisionData
 
 class HandTracker(VisionProcessor):
-    def __init__(self, target_class_id=0, obstacle_class_id=-1, conf_threshold=0.5, yolo_path=r"model/yolo26/runs/detect/yolo26_train_hand/weights/best.pt"):
+    def __init__(self, target_class_id=0, obstacle_class_id=-1, conf_threshold=0.6, yolo_path=r"model/yolo26/runs/detect/yolo26_train_hand/weights/best.pt"):
         """
         :param target_class_id: 目標物的 YOLO 類別 ID 
         :param obstacle_class_id: 障礙物的 YOLO 類別 ID 

@@ -19,7 +19,7 @@ class TraceNavControl(FlightBehavior):
         self.last_error_x = 0
         self.last_error_y = 0
         self.lost_frames = 999
-        self.memory_limit = 120 # 記憶維持的 frame 數
+        self.memory_limit = 60 # 記憶維持的 frame 數
         
     def calculate_command(self, user_input, vision_data):
         # 1. 人工接管優先
@@ -43,10 +43,10 @@ class TraceNavControl(FlightBehavior):
             # A. 對齊 (永遠 100, -100 或 0)
             # -------------------------
             if abs(error_x) > self.align_threshold:
-                yv = 100 if error_x > 0 else -100
+                yv = 80 if error_x > 0 else -80
                 
             if abs(error_y) > self.align_threshold:
-                ud = 100 if error_y > 0 else -100
+                ud = 80 if error_y > 0 else -80
 
             # -------------------------
             # B. 距離控制 (利用面積大小)
@@ -57,7 +57,7 @@ class TraceNavControl(FlightBehavior):
             elif area < self.TOO_FAR_AREA:
                 # 太遠，而且必須「機頭已經對準」的情況下才往前衝
                 if yv == 0 and ud == 0:
-                    fb = 30
+                    fb = 40
             else:
                 fb = 0    # 距離適中，維持不前後移動
 
@@ -68,9 +68,9 @@ class TraceNavControl(FlightBehavior):
             if self.lost_frames < self.memory_limit:
                 # 根據殘影，使用最大速度暴力轉頭/升降尋找目標
                 if abs(self.last_error_x) > self.align_threshold:
-                    yv = 100 if self.last_error_x > 0 else -100
+                    yv = 60 if self.last_error_x > 0 else -60
                 if abs(self.last_error_y) > self.align_threshold:
-                    ud = 100 if self.last_error_y > 0 else -100
+                    ud = 60 if self.last_error_y > 0 else -60
                     
                 # 避免終端機瘋狂洗版，每半秒印一次提示
                 if self.lost_frames % 15 == 1:

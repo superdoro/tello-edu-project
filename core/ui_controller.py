@@ -97,7 +97,7 @@ class UIController:
             
             # 處理系統級別的語音指令
             # if "起飛" in cmd: user_input.takeoff = True
-            if "降落" in cmd: user_input.land = True
+            # if "降落" in cmd: user_input.land = True
             # elif "切換" in cmd: user_input.toggle_mode = True
             
         return user_input
