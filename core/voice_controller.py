@@ -1,4 +1,5 @@
 import os
+import time
 import threading
 import pythonnet
 
@@ -16,14 +17,47 @@ class VoiceController:
     def __init__(self):
         self.current_command = ""
         self.is_running = True
+        self.last_trigger_time = 0  # 用於抗噪防連發機制
+        
+        # ==========================================
+        # 長音節指令對映表 (Mapping)
+        # ==========================================
+        # 提示：若您的 Windows 系統預設為中文，對純英文的辨識度可能會稍弱。
+        # 因此我們同時放入「英文長句」與「中文長句」，讓系統都能聽懂，並統一轉換為短指令。
+        self.command_map = {
+            "tello please take off": "起飛",
+            "泰羅請起飛": "起飛",
+            
+            "tello please land": "降落",
+            "泰羅請降落": "降落",
+            
+            "tello go forward": "前進",
+            "泰羅向前飛": "前進",
+            
+            "tello go backward": "後退",
+            "泰羅向後退": "後退",
+            
+            "tello go left": "向左",
+            "泰羅向左飛": "向左",
+            
+            "tello go right": "向右",
+            "泰羅向右飛": "向右",
+            
+            "tello go up": "上升",
+            "泰羅向上升": "上升",
+            
+            "tello go down": "下降",
+            "泰羅向下降": "下降",
+            
+            "tello turn around": "轉向",
+            "泰羅請轉向": "轉向"
+        }
         
         try:
             # ==========================================
-            # 2. 終極解法：直接指定 Windows 系統底層的 DLL 絕對路徑
+            # 直接指定 Windows 系統底層的 DLL 絕對路徑
             # ==========================================
-            # 優先尋找 64 位元路徑 (Framework64)
             dll_path_64 = r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\System.Speech.dll"
-            # 備用尋找 32 位元路徑 (Framework)
             dll_path_32 = r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\WPF\System.Speech.dll"
             
             if os.path.exists(dll_path_64):
@@ -33,10 +67,8 @@ class VoiceController:
                 clr.AddReference(dll_path_32)
                 print("   -> 成功載入 32 位元 System.Speech.dll")
             else:
-                # 如果都找不到，嘗試最後的預設呼叫
                 clr.AddReference("System.Speech")
                 
-            # 載入模組
             from System.Speech.Recognition import (
                 SpeechRecognitionEngine, 
                 Choices, 
@@ -48,14 +80,10 @@ class VoiceController:
             # 3. 初始化辨識引擎
             self.recognizer = SpeechRecognitionEngine()
             
-            # 4. 建立嚴格的關鍵字清單
+            # 4. 將對映表中的「長音節句子」加入辨識清單
             choices = Choices()
-            commands = [
-                "降落", 
-                "前進", "後退", "向左", "向右", "上升", "下降", "轉向",
-            ]
-            for cmd in commands:
-                choices.Add(cmd)
+            for long_cmd in self.command_map.keys():
+                choices.Add(long_cmd)
             
             grammar = Grammar(GrammarBuilder(choices))
             self.recognizer.LoadGrammar(grammar)
@@ -64,14 +92,28 @@ class VoiceController:
             self.recognizer.SetInputToDefaultAudioDevice()
             
             def on_speech_recognized(sender, e):
-                # 信心度大於 0.7 才視為有效指令
-                if e.Result.Confidence > 0.7:
-                    self.current_command = e.Result.Text
+                # ==========================================
+                # 🔥 軟體抗噪處理邏輯
+                # ==========================================
+                if e.Result.Confidence > 0.4:
+                    current_time = time.time()
+                    
+                    # 2. 防連發冷卻 (Debounce)：限制每 1 秒內只能接收一次指令
+                    if current_time - self.last_trigger_time > 1:
+                        recognized_text = e.Result.Text
+                        
+                        # 3. 將聽到的長句子，轉換為系統期待的短指令
+                        if recognized_text in self.command_map:
+                            self.current_command = self.command_map[recognized_text]
+                            self.last_trigger_time = current_time
+                            
+                            # 印出狀態方便除錯
+                            print(f"🎤 [語音] 聽到: '{recognized_text}' -> 轉換為: '{self.current_command}' (信心度: {e.Result.Confidence:.2f})")
                     
             self.recognizer.SpeechRecognized += on_speech_recognized
             self.recognizer.RecognizeAsync(RecognizeMode.Multiple)
             
-            print("✅ [系統訊息] Windows 內建超高準確度離線語音監聽已啟動！")
+            print("✅ [系統訊息] 長音節抗噪語音監聽已啟動！")
             
         except Exception as e:
             print(f"❌ [錯誤] Windows 語音初始化失敗: {e}")

@@ -2,7 +2,7 @@ import numpy as np
 
 class PIDController:
     """獨立的 PID 速度計算器"""
-    def __init__(self, kp: float, ki: float, kd: float, limit: int = 60):
+    def __init__(self, kp: float, ki: float, kd: float, limit: int = 100):
         self.kp = kp
         self.ki = ki
         self.kd = kd

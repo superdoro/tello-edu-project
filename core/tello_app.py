@@ -1,105 +1,34 @@
-'''
-舊版
-'''
-# import cv2
-# from core.drone_controller import DroneController
-# from core.ui_controller import UIController
-# from behaviors.manual_control import ManualControl
+"""
+應用程式主體，負責調度硬體、介面與飛行策略。
+"""
 
-# class TelloApp:
-#     """
-#     應用程式主體，負責調度硬體、介面與飛行策略。
-#     """
-#     def __init__(self):
-#         # 初始化核心模組
-#         self.drone = DroneController()
-#         self.ui = UIController()
-        
-#         # 預設行為：手動控制
-#         self.behavior = ManualControl()
-#         self.is_running = True
-
-#     def run(self):
-#         """啟動主迴圈"""
-#         # 1. 連線無人機
-#         self.drone.connect()
-        
-#         while self.is_running:
-#             # 2. 獲取使用者輸入
-#             user_input = self.ui.get_input()
-            
-#             # 3. 處理全域系統指令 (起飛、降落、退出)
-#             if user_input.takeoff:
-#                 self.drone.takeoff()
-#             elif user_input.land:
-#                 self.drone.land()
-#             elif user_input.quit:
-#                 self.shutdown()
-#                 break # 退出迴圈
-                
-#             # 4. 獲取影像並調整大小
-#             frame = self.drone.get_video_frame()
-#             if frame is not None and frame.size > 0:
-#                 frame = cv2.resize(frame, (720, 480))
-                
-#                 # 可以在這裡加入模式文字標示
-#                 cv2.putText(frame, self.behavior.get_mode(), (10, 30), 
-#                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            
-#             # 5. 計算並發送飛行指令 (交給當前的 behavior 策略去算)
-#             commands = self.behavior.calculate_command(user_input)
-            
-#             # 使用 *commands 將 tuple (lr, fb, ud, yv) 解包傳入
-#             self.drone.send_movement(*commands)
-            
-#             # 6. 顯示與刷新畫面
-#             self.ui.display_frame(frame)
-
-#     def shutdown(self):
-#         """關閉程序"""
-#         print("[系統訊息] 正在關閉程序...")
-#         self.is_running = False
-#         self.drone.land()      # 確保先降落
-#         self.drone.teardown()  # 關閉無人機連線與串流
-#         self.ui.teardown()     # 關閉視窗
-
-'''
-新版本
-'''
 import cv2
 from core.drone_controller import DroneController
 from core.ui_controller import UIController
 from behaviors.manual_control import ManualControl
 
-from behaviors.auto_track import AutoTrackControl
+# from behaviors.auto_track import AutoTrackControl
 from vision.hand_tracker import HandTracker
 from behaviors.auto_nav import AutoNavControl
-from vision.color_detector import ColorDetector
+from behaviors.trace_nav import TraceNavControl
+# from vision.color_detector import ColorDetector
+from vision.yolo_detector import YoloDetector
 from vision.hybrid_detector import HybridDetector
 from behaviors.hybrid_nav import HybridNavControl
 
-'''
-參數設定
-'''
-yolo_path = "prototype/model/yolo26/runs/detect/yolo26_train4/weights/best.pt"
-
 class TelloApp:
-    """
-    應用程式主體，負責調度硬體、介面與飛行策略。
-    """
     def __init__(self):
         # 初始化核心硬體與介面模組
-        print("   -> 正在初始化硬體控制器...")
+        print("  -> 正在初始化硬體控制器...")
         self.drone = DroneController()
 
-        print("   -> 正在初始化 UI 介面...")
+        print("  -> 正在初始化 UI 介面...")
         self.ui = UIController()
         
         # ==============================================================
         # 【高擴充性設計】定義所有可用的飛行模式清單
         # 未來新增模式(如語音控制)時，只需要在此清單加入新的字典設定即可。
         # ==============================================================
-        # print("   -> 正在初始化 AI 視覺辨識模型 (這可能會花幾秒鐘)...")
         self.modes = [
             {
                 "name": "MANUAL CONTROL",
@@ -107,25 +36,24 @@ class TelloApp:
                 "vision": None  # 手動模式
             },
             {
-                "name": "AUTO TRACKING",
-                "behavior": AutoTrackControl(),
+                "name": "HAND TRACKER",
+                "behavior": TraceNavControl(),
                 "vision": HandTracker() # 自動跟追模式(手掌辨識)
             },
-            {
-                "name": "AUTO NAVIGATION",
-                "behavior": AutoNavControl(),
-                "vision": ColorDetector() #自動跟追模式(氣球辨識)
-            },
             # {
-            #     "name": "YOLO AI NAVIGATION",
-            #     "behavior": AutoNavControl(), 
-            #     # 明確指定 67(手機) 與 73(書本)
-            #     "vision": YoloDetector(target_class_id=0, obstacle_class_id=56)
+            #     "name": "AUTO NAVIGATION",
+            #     "behavior": AutoNavControl(),
+            #     "vision": ColorDetector() #自動跟追模式(氣球辨識)
             # },
+            {
+                "name": "BALLON TRACKER",
+                "behavior": AutoNavControl(), 
+                "vision": YoloDetector()
+            },
             {
                 "name": "ULTIMATE APF NAV (YOLO+RAFT)",
                 "behavior": HybridNavControl(), 
-                "vision": HybridDetector(yolo_path)
+                "vision": HybridDetector()
             }
             # 未來擴充範例：
             # {"name": "VOICE CONTROL", "behavior": VoiceControlBehavior(), "vision": None}
@@ -153,6 +81,7 @@ class TelloApp:
     def toggle_mode(self):
         """切換到清單中的下一個模式 (支援無限循環切換)"""
         self.current_mode_index = (self.current_mode_index + 1) % len(self.modes)
+        self.ui.current_vision = self.vision
         print(f"[模式切換] 目前模式為: {self.current_mode['name']}")
 
     def run(self):

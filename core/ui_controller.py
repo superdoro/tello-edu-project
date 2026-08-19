@@ -42,6 +42,7 @@ class UIController:
         pygame.display.set_caption("Tello 整合控制面板 (請點擊此視窗)")
         self.speed = 50 # 預設鍵盤控制速度
         self.voice = VoiceController() #聲控類別
+        self.current_vision = None
 
     def get_input(self) -> UserInput:
         """
@@ -79,6 +80,15 @@ class UIController:
         # 旋轉控制 (A、D 鍵)
         if keys[pygame.K_a]: user_input.yv = -self.speed
         elif keys[pygame.K_d]: user_input.yv = self.speed
+
+        # 假設 key 是 Pygame 讀取到的按鍵
+        if self.current_vision and keys[pygame.K_f]:
+            if hasattr(self.current_vision, 'toggle_lock'):
+                self.current_vision.toggle_lock()
+
+        if self.current_vision and keys[pygame.K_r]:
+            if hasattr(self.current_vision, 'reset_target'):
+                self.current_vision.reset_target()
 
         cmd = self.voice.get_command()
         if cmd:

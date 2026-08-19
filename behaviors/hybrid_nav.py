@@ -57,7 +57,7 @@ class HybridNavControl(FlightBehavior):
                 
             if L > self.side_danger_threshold:
                 overflow = L - self.side_danger_threshold
-                force_lr += min(50, overflow * self.repulse_gain_lr) 
+                force_lr += min(50, overflow * self.repulse_gain_lr)
                 force_fb -= min(40, overflow * self.repulse_gain_fb)
                 
             if R > self.side_danger_threshold:

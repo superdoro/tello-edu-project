@@ -4,7 +4,7 @@ from vision.farneback_detector import FarnebackDetector
 from vision.base import VisionProcessor, VisionData
 
 class HybridDetector(VisionProcessor):
-    def __init__(self, yolo_path="prototype/model/yolo26/runs/detect/yolo26_train4/weights/best.pt", target_id=0):
+    def __init__(self, yolo_path="model/yolo26/runs/detect/yolo26_train4/weights/best.pt", target_id=0):
         self.target_id = target_id
         print("========================================")
         print("🤖 [系統訊息] 啟動極速複合視覺 (自訂 YOLO + 傳統 Farneback)...")

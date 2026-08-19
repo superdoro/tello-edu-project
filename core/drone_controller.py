@@ -1,4 +1,5 @@
 from djitellopy import tello
+import logging
 
 class DroneController:
     """
@@ -8,6 +9,9 @@ class DroneController:
         # 建立 Tello 物件
         self.drone = tello.Tello()
         self.is_connected = False
+
+        # 預設隱藏 Tello 的日誌(隱藏所有 INFO 訊息)
+        logging.getLogger("djitellopy").setLevel(logging.WARNING)
 
     def connect(self):
         """
@@ -52,7 +56,7 @@ class DroneController:
 
     def get_video_frame(self):
         """
-        獲取最新的一張影像畫格 (Frame)
+        獲取最新的一張影像 (Frame)
         :return: OpenCV 格式的影像矩陣 (若無畫面則回傳 None)
         """
         if self.is_connected:
@@ -68,4 +72,5 @@ class DroneController:
         if self.is_connected:
             print("[系統訊息] 正在關閉無人機連線...")
             self.drone.streamoff()
+            self.drone.end()
             self.is_connected = False

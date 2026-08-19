@@ -3,15 +3,14 @@ from ultralytics import YOLO
 from vision.base import VisionProcessor, VisionData
 
 class YoloDetector(VisionProcessor):
-    def __init__(self, target_class_id=67, obstacle_class_id=64, conf_threshold=0.5):
+    def __init__(self, target_class_id=0, obstacle_class_id=-1, conf_threshold=0.5, yolo_path="model/yolo26/runs/detect/yolo26_train4/weights/best.pt"):
         """
         :param target_class_id: 目標物的 YOLO 類別 ID (預設 67: 手機)
         :param obstacle_class_id: 障礙物的 YOLO 類別 ID (預設 64: 滑鼠)
         :param conf_threshold: 信心度門檻
         """
         print("[系統訊息] 正在載入 YOLO 預訓練模型...")
-        # 預設載入 yolov8n.pt (Nano 模型，最適合 CPU 即時運算)
-        self.model = YOLO("yolov8n.pt") 
+        self.model = YOLO(yolo_path) 
         
         self.target_class_id = target_class_id
         self.obstacle_class_id = obstacle_class_id

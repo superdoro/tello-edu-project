@@ -31,14 +31,14 @@ class AutoNavControl(FlightBehavior):
             # print("⚠️ 警告：偵測到障礙物！執行迴避！")
             # 如果障礙物在畫面右邊，無人機就往左邊平移迴避；反之亦然
             if obstacle['cx'] > self.target_cx:
-                lr = -40 # 向左閃
-                yv = 40
+                lr = -100 # 向左閃
+                yv = 100
             else:
-                lr = 40  # 向右閃
-                yv = -40
+                lr = 100  # 向右閃
+                yv = -100
                 
             # 同時稍微向後退以保持安全距離
-            fb = -20
+            fb = -80
             return (lr, fb, ud, yv)
 
         # 優先權 2：向目標導航 (Attraction)
@@ -52,7 +52,7 @@ class AutoNavControl(FlightBehavior):
             
             # 設定前進速度 (當目標在視野中心附近時，穩定向前推進)
             if abs(error_x) < 50 and abs(error_y) < 50:
-                fb = 30 # 穩定向前走
+                fb = 100 # 穩定向前走
             else:
                 fb = 0  # 先對準目標再走
                 
