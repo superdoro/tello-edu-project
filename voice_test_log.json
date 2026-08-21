@@ -1,0 +1,10 @@
+{"timestamp": "2026-08-21 15:24:34", "raw_text": "tello go up", "intent": "上升", "confidence": 0.91}
+{"timestamp": "2026-08-21 15:24:57", "raw_text": "tello go up", "intent": "上升", "confidence": 0.77}
+{"timestamp": "2026-08-21 15:25:02", "raw_text": "tello go right", "intent": "向右", "confidence": 0.64}
+{"timestamp": "2026-08-21 15:25:06", "raw_text": "tello go right", "intent": "向右", "confidence": 0.72}
+{"timestamp": "2026-08-21 15:25:18", "raw_text": "安全降落", "intent": "降落", "confidence": 0.94}
+{"timestamp": "2026-08-21 15:25:24", "raw_text": "tello go up", "intent": "上升", "confidence": 0.81}
+{"timestamp": "2026-08-21 15:25:30", "raw_text": "往前飛", "intent": "前進", "confidence": 0.94}
+{"timestamp": "2026-08-21 15:25:41", "raw_text": "往後退", "intent": "後退", "confidence": 0.85}
+{"timestamp": "2026-08-21 15:25:52", "raw_text": "往左飛", "intent": "向左", "confidence": 0.88}
+{"timestamp": "2026-08-21 15:30:11", "raw_text": "起飛", "intent": "起飛", "confidence": 0.92}
