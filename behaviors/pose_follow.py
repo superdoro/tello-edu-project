@@ -1,0 +1,47 @@
+from behaviors.base import FlightBehavior
+from utils.pid_controller import PIDController
+
+class BodyFollowControl(FlightBehavior):
+    def __init__(self):
+        # 1. 旋轉 PID (對準胸腔 X 軸) -> 極速解鎖至 100
+        self.pid_yv = PIDController(kp=0.25, ki=0.0, kd=0.1, limit=100)
+        
+        # 2. 升降 PID (對準胸腔 Y 軸) -> 極速解鎖至 100
+        self.pid_ud = PIDController(kp=0.3, ki=0.0, kd=0.1, limit=100)
+        
+        # 3. 前後 PID (維持雙肩寬度) -> 極速限制為 50
+        self.pid_fb = PIDController(kp=0.4, ki=0.0, kd=0.15, limit=50)
+        
+        self.target_cx = 360 # 畫面 X 中心
+        self.target_cy = 200 # 畫面 Y 中心 (稍微偏上，讓頭部不會被切出畫面)
+        
+        # 距離定義：期望的雙肩像素寬度
+        self.TARGET_SHOULDER_WIDTH = 120 
+
+    def calculate_command(self, user_input, vision_data):
+        # 人工接管優先
+        if any([user_input.lr, user_input.fb, user_input.ud, user_input.yv]):
+            return (user_input.lr, user_input.fb, user_input.ud, user_input.yv)
+
+        target = getattr(vision_data, 'target', None) if vision_data else None
+        lr, fb, ud, yv = 0, 0, 0, 0
+
+        if target:
+            # A. 旋轉控制 (YAW)
+            error_x = target['chest_cx'] - self.target_cx
+            yv = self.pid_yv.compute(error_x)
+            
+            # B. 升降控制 (UP/DOWN)
+            error_y = self.target_cy - target['chest_cy']
+            ud = self.pid_ud.compute(error_y)
+            
+            # C. 前後距離控制 (FORWARD/BACKWARD)
+            error_width = target['shoulder_width'] - self.TARGET_SHOULDER_WIDTH
+            fb = -self.pid_fb.compute(error_width)
+            
+            # Deadzone (死區)：當誤差很小時，不再微調輸出 0，避免無人機瘋狂抖動
+            if abs(error_x) < 30: yv = 0
+            if abs(error_y) < 30: ud = 0
+            if abs(error_width) < 15: fb = 0
+
+        return (int(lr), int(fb), int(ud), int(yv))

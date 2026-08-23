@@ -43,7 +43,7 @@ class BalloonHuntControl(FlightBehavior):
         
         if self.state == "SEARCH":
             # [行為] 原地緩慢旋轉，尋找任何氣球
-            yv = 60
+            # yv = 30
             if balloon:
                 self.change_state("APPROACH")
 

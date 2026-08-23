@@ -8,13 +8,15 @@ from core.ui_controller import UIController
 from behaviors.manual_control import ManualControl
 
 # from behaviors.auto_track import AutoTrackControl
-from vision.hand_tracker import HandTracker
-from behaviors.auto_nav import AutoNavControl
-from behaviors.trace_nav import TraceNavControl
+from vision.pose_tracker import BodyPoseTracker
+# from behaviors.auto_nav import AutoNavControl
+from behaviors.pose_follow import BodyFollowControl
 # from vision.color_detector import ColorDetector
-from vision.yolo_detector import YoloDetector
-from vision.hybrid_detector import HybridDetector
-from behaviors.hybrid_nav import HybridNavControl
+# from vision.yolo_detector import YoloDetector
+# from vision.hybrid_detector import HybridDetector
+# from behaviors.hybrid_nav import HybridNavControl
+from behaviors.balloon_hunt import BalloonHuntControl
+from vision.balloon_digit_detector import BalloonDigitDetector
 
 class TelloApp:
     def __init__(self):
@@ -37,24 +39,24 @@ class TelloApp:
             },
             {
                 "name": "HAND TRACKER",
-                "behavior": TraceNavControl(),
-                "vision": HandTracker() # 自動跟追模式(手掌辨識)
+                "behavior": BodyFollowControl(),
+                "vision": BodyPoseTracker() # 自動跟追模式(手掌辨識)
+            },
+            {
+                "name": "BALLON HUNTER (YOLO * 2)",
+                "behavior": BalloonHuntControl(),
+                "vision": BalloonDigitDetector()
             },
             # {
-            #     "name": "AUTO NAVIGATION",
-            #     "behavior": AutoNavControl(),
-            #     "vision": ColorDetector() #自動跟追模式(氣球辨識)
+            #     "name": "BALLON TRACKER",
+            #     "behavior": AutoNavControl(), 
+            #     "vision": YoloDetector()
             # },
-            {
-                "name": "BALLON TRACKER",
-                "behavior": AutoNavControl(), 
-                "vision": YoloDetector()
-            },
-            {
-                "name": "ULTIMATE APF NAV (YOLO+RAFT)",
-                "behavior": HybridNavControl(), 
-                "vision": HybridDetector()
-            }
+            # {
+            #     "name": "ULTIMATE APF NAV (YOLO+RAFT)",
+            #     "behavior": HybridNavControl(), 
+            #     "vision": HybridDetector()
+            # }
             # 未來擴充範例：
             # {"name": "VOICE CONTROL", "behavior": VoiceControlBehavior(), "vision": None}
         ]
