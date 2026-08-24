@@ -83,8 +83,8 @@ class UIController:
 
         # 假設 key 是 Pygame 讀取到的按鍵
         if self.current_vision and keys[pygame.K_f]:
-            if hasattr(self.current_vision, 'toggle_lock'):
-                self.current_vision.toggle_lock()
+            if hasattr(self.current_vision, 'toggle_tracking_mode'):
+                self.current_vision.toggle_tracking_mode()
 
         if self.current_vision and keys[pygame.K_r]:
             if hasattr(self.current_vision, 'reset_target'):

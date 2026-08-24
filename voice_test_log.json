@@ -8,3 +8,4 @@
 {"timestamp": "2026-08-21 15:25:41", "raw_text": "往後退", "intent": "後退", "confidence": 0.85}
 {"timestamp": "2026-08-21 15:25:52", "raw_text": "往左飛", "intent": "向左", "confidence": 0.88}
 {"timestamp": "2026-08-21 15:30:11", "raw_text": "起飛", "intent": "起飛", "confidence": 0.92}
+{"timestamp": "2026-08-24 15:05:24", "raw_text": "tello go up", "intent": "上升", "confidence": 0.46}
