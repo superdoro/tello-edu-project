@@ -16,8 +16,8 @@ from behaviors.pose_follow import BodyFollowControl
 # from vision.hybrid_detector import HybridDetector
 # from behaviors.hybrid_nav import HybridNavControl
 from behaviors.balloon_hunt import BalloonHuntControl
-from vision.balloon_digit_detector import BalloonDigitDetector
-
+# from vision.balloon_digit_detector import BalloonDigitDetector
+from vision.balloon_detector_with_aruco import BalloonDetector
 class TelloApp:
     def __init__(self):
         # 初始化核心硬體與介面模組
@@ -43,9 +43,9 @@ class TelloApp:
                 "vision": BodyPoseTracker() # 自動跟追模式(手掌辨識)
             },
             {
-                "name": "BALLON HUNTER (YOLO * 2)",
+                "name": "BALLON HUNTER (YOLO + aruco)",
                 "behavior": BalloonHuntControl(),
-                "vision": BalloonDigitDetector()
+                "vision": BalloonDetector()
             },
             # {
             #     "name": "BALLON TRACKER",

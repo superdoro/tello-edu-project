@@ -10,14 +10,14 @@ class BodyFollowControl(FlightBehavior):
         self.pid_ud = PIDController(kp=0.5, ki=0.0, kd=0.15, limit=100)
         
         # 3. 前後 PID (維持雙肩寬度) -> 極速限制為 50
-        self.pid_fb = PIDController(kp=0.4, ki=0.0, kd=0.15, limit=60)
+        self.pid_fb = PIDController(kp=0.4, ki=0.0, kd=0.15, limit=70)
         
         self.target_cx = 360 # 畫面 X 中心
         self.target_cy = 200 # 畫面 Y 中心 (稍微偏上，讓頭部不會被切出畫面)
         
         # 距離定義：期望的雙肩像素寬度
-        self.TARGET_SHOULDER_WIDTH = 110 
-
+        self.TARGET_SHOULDER_WIDTH = 120
+    
     def calculate_command(self, user_input, vision_data):
         # 人工接管優先
         if any([user_input.lr, user_input.fb, user_input.ud, user_input.yv]):
