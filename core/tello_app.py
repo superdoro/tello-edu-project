@@ -18,6 +18,9 @@ from behaviors.pose_follow import BodyFollowControl
 from behaviors.balloon_hunt import BalloonHuntControl
 # from vision.balloon_digit_detector import BalloonDigitDetector
 from vision.balloon_detector_with_aruco import BalloonDetector
+from vision.fluid_explorer_vision import DepthExplorerVision
+from behaviors.fluid_explore import FluidExploreControl
+
 class TelloApp:
     def __init__(self):
         # 初始化核心硬體與介面模組
@@ -52,6 +55,16 @@ class TelloApp:
             #     "behavior": AutoNavControl(), 
             #     "vision": YoloDetector()
             # },
+            # {
+            #     "name": "RANDOM EXPLORER",
+            #     "behavior": RandomExploreControl(),
+            #     "vision": DepthObstacleDetector()
+            # },
+            {
+                "name": "FLUID EXPLORER",
+                "behavior": FluidExploreControl(),
+                "vision": DepthExplorerVision()
+            }
             # {
             #     "name": "ULTIMATE APF NAV (YOLO+RAFT)",
             #     "behavior": HybridNavControl(), 

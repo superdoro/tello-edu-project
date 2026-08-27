@@ -90,10 +90,10 @@ class UIController:
             if hasattr(self.current_vision, 'reset_target'):
                 self.current_vision.reset_target()
 
-        cmd = self.voice.get_command()
-        if cmd:
-            print(f"🎤 [語音辨識] 聽到指令: {cmd}")
-            user_input.voice_command = cmd
+        # cmd = self.voice.get_command()
+        # if cmd:
+        #     print(f"🎤 [語音辨識] 聽到指令: {cmd}")
+        #     user_input.voice_command = cmd
             
             # 處理系統級別的語音指令
             # if "起飛" in cmd: user_input.takeoff = True
