@@ -5,6 +5,7 @@ from core.voice_controller import VoiceController
 
 # ==========================================
 # 定義輸入資料結構 (Data Transfer Object)
+# 聲音功能暫時移除(因為聲控功能尚不完善)
 # ==========================================
 @dataclass
 class UserInput:
@@ -23,6 +24,8 @@ class UserInput:
     land: bool = False        # 是否要求降落
     quit: bool = False        # 是否要求退出程式
     toggle_mode: bool = False # 是否要求切換模式 (如按 Z 鍵)
+    reserve_key_f: bool = False # 預留功能鍵 F (可用於切換追蹤模式)
+    reserve_key_r: bool = False # 預留功能鍵 R (可用於重置追蹤目標)
 
     # 聲音指令
     voice_command: str = ""
@@ -39,10 +42,9 @@ class UIController:
         # 初始化 Pygame 控制面板
         pygame.init()
         self.win = pygame.display.set_mode((400, 400))
-        pygame.display.set_caption("Tello 整合控制面板 (請點擊此視窗)")
-        self.speed = 50 # 預設鍵盤控制速度
-        self.voice = VoiceController() #聲控類別
-        self.current_vision = None
+        pygame.display.set_caption("Tello 控制面板")
+        self.speed = 70 # 預設鍵盤控制速度
+        # self.voice = VoiceController() #聲控類別
 
     def get_input(self) -> UserInput:
         """
@@ -59,6 +61,10 @@ class UIController:
                     user_input.takeoff = True
                 elif event.key == pygame.K_l:
                     user_input.land = True
+                elif event.key == pygame.K_f:
+                    user_input.reserve_key_f = True
+                elif event.key == pygame.K_r:
+                    user_input.reserve_key_r = True
                 elif event.key == pygame.K_q:
                     user_input.quit = True
                 
@@ -80,15 +86,6 @@ class UIController:
         # 旋轉控制 (A、D 鍵)
         if keys[pygame.K_a]: user_input.yv = -self.speed
         elif keys[pygame.K_d]: user_input.yv = self.speed
-
-        # 假設 key 是 Pygame 讀取到的按鍵
-        if self.current_vision and keys[pygame.K_f]:
-            if hasattr(self.current_vision, 'toggle_tracking_mode'):
-                self.current_vision.toggle_tracking_mode()
-
-        if self.current_vision and keys[pygame.K_r]:
-            if hasattr(self.current_vision, 'reset_target'):
-                self.current_vision.reset_target()
 
         # cmd = self.voice.get_command()
         # if cmd:

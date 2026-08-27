@@ -24,15 +24,15 @@ from behaviors.fluid_explore import FluidExploreControl
 class TelloApp:
     def __init__(self):
         # 初始化核心硬體與介面模組
-        print("  -> 正在初始化硬體控制器...")
+        print("tello app -> 正在初始化硬體控制器...")
         self.drone = DroneController()
 
-        print("  -> 正在初始化 UI 介面...")
+        print("tello app -> 正在初始化 UI 介面...")
         self.ui = UIController()
         
         # ==============================================================
-        # 【高擴充性設計】定義所有可用的飛行模式清單
-        # 未來新增模式(如語音控制)時，只需要在此清單加入新的字典設定即可。
+        # 定義所有可用的飛行模式清單
+        # 未來新增模式時，只需要在此清單加入新的字典設定即可。
         # ==============================================================
         self.modes = [
             {
@@ -43,7 +43,7 @@ class TelloApp:
             {
                 "name": "HAND TRACKER",
                 "behavior": BodyFollowControl(),
-                "vision": BodyPoseTracker() # 自動跟追模式(手掌辨識)
+                "vision": BodyPoseTracker() # 自動跟追模式(手掌、胸腔定位)
             },
             {
                 "name": "BALLON HUNTER (YOLO + aruco)",
@@ -96,12 +96,28 @@ class TelloApp:
     def toggle_mode(self):
         """切換到清單中的下一個模式 (支援無限循環切換)"""
         self.current_mode_index = (self.current_mode_index + 1) % len(self.modes)
-        self.ui.current_vision = self.vision
         print(f"[模式切換] 目前模式為: {self.current_mode['name']}")
+
+    def toggle_tracking_mode(self):
+        """切換當前模式的追蹤模式 (如果有支援的話)"""
+        if self.vision and hasattr(self.vision, 'toggle_tracking_mode'):
+            self.vision.toggle_tracking_mode()
+            print("[追蹤模式切換] 目前追蹤模式已切換。")
+        else:
+            print("[追蹤模式切換] 當前模式不支援追蹤模式切換。")
+
+    def reset_tracking_target(self):
+        """重置 or 鎖定當前模式的追蹤目標 (如果有支援的話)"""
+        if self.vision and hasattr(self.vision, 'reset_target'):
+            self.vision.reset_target()
+            print("[追蹤目標重置/鎖定] 追蹤目標已重置/鎖定。")
+        else:
+            print("[追蹤目標重置/鎖定] 當前模式不支援追蹤目標重置/鎖定。")
 
     def run(self):
         """啟動主迴圈"""
         # 1. 連線無人機
+        print("[系統訊息] Tello 連線中...")
         self.drone.connect()
         
         while self.is_running:
@@ -115,6 +131,12 @@ class TelloApp:
                 self.drone.land()
             elif user_input.toggle_mode:  # 處理 Z 鍵切換
                 self.toggle_mode()
+            elif user_input.reserve_key_f:  # 處理 F 鍵切換 (保留給各視覺模式自行定義)
+                if self.vision and hasattr(self.vision, 'toggle_tracking_mode'):
+                    self.vision.toggle_tracking_mode()
+            elif user_input.reserve_key_r:  # 處理 R 鍵切換 (保留給各視覺模式自行定義)  
+                if self.vision and hasattr(self.vision, 'reset_target'):
+                    self.vision.reset_target()
             elif user_input.quit:
                 self.shutdown()
                 break # 退出迴圈
