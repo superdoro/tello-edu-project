@@ -5,7 +5,7 @@ class ManualControl(FlightBehavior):
         # [新增] 語音控制的暫存速度與計時器
         self.v_lr, self.v_fb, self.v_ud, self.v_yv = 0, 0, 0, 0
         self.voice_timer = 0
-        self.voice_duration = 150 # 大約維持 150 個 frame (約 5 秒鐘)
+        self.voice_duration = 170 # 大約維持 170 個 frame (約 5 秒鐘)
 
     def calculate_command(self, user_input, vision_data=None) -> tuple:
         # [新增] 檢查是否有新的方向性語音指令
@@ -15,13 +15,13 @@ class ManualControl(FlightBehavior):
             self.v_lr, self.v_fb, self.v_ud, self.v_yv = 0, 0, 0, 0
             self.voice_timer = self.voice_duration # 啟動計時器
             
-            if "前進" in cmd: self.v_fb = 50
-            elif "後退" in cmd: self.v_fb = -50
-            elif "向左" in cmd: self.v_lr = -50
-            elif "向右" in cmd: self.v_lr = 50
-            elif "上升" in cmd: self.v_ud = 50
-            elif "下降" in cmd: self.v_ud = -50
-            elif "轉向" in cmd: self.v_yv = 50 # 簡單旋轉測試
+            if "前進" in cmd: self.v_fb = 70
+            elif "後退" in cmd: self.v_fb = -70
+            elif "向左" in cmd: self.v_lr = -70
+            elif "向右" in cmd: self.v_lr = 70
+            elif "上升" in cmd: self.v_ud = 70
+            elif "下降" in cmd: self.v_ud = -70
+            elif "轉向" in cmd: self.v_yv = 70 # 簡單旋轉測試
         
         # 1. 優先使用鍵盤 (只要有按鍵，立刻蓋過語音)
         if any([user_input.lr, user_input.fb, user_input.ud, user_input.yv]):

@@ -9,7 +9,7 @@ class BalloonDetector(VisionProcessor):
                  depth_model_path="model/yolo26/runs/detect/yolo_depth_collect/yolo26n-depth.pt",
                  balloon_class_id=0):
         print("========================================")
-        print("🎈 [系統訊息] 啟動氣球獵手視覺 (含 ArUco 補償 & YOLO Depth 空間感知)...")
+        print("[系統訊息] 啟動氣球獵手視覺 (含 ArUco 補償 & YOLO Depth 空間感知)...")
         print("========================================")
         
         self.model = YOLO(yolo_path)

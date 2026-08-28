@@ -1,18 +1,20 @@
-# 架構設計理念 (暫時)
-目前需要開發新的自動模式，要求如下:
-1.需要能夠辨識氣球，然後環繞飛行直到找出氣球上的標記
-2.依照標記順序依次撞擊氣球(由1號再到2號依此類推)
-3.若為0號則應避開
-4.需要能自動巡路找出所有氣球
-
+# 架構設計理念
 ### 備忘錄
-可用於測試無人機自動駕駛的標籤，具備順序性，且容易辨識\
-->[An Autonomous Tracking and Landing Method for Unmanned Aerial Vehicles Based on Visual Navigation](https://www.mdpi.com/2504-446X/7/12/703)
+待辦:
+- [ ] 身體/手部追蹤需要鎖定目標的功能
+    * [ ] 人臉辨識
+    * [ ] 切換鎖定 
+- [ ] 空戰功能?
+- [ ] 語音系統
 
-自動導航可嘗試\
+### 可能有用的資源存放區
+
+* [An Autonomous Tracking and Landing Method for Unmanned Aerial Vehicles Based on Visual Navigation](https://www.mdpi.com/2504-446X/7/12/703) (可用於測試無人機自動駕駛的標籤，具備順序性，且容易辨識)
+
+* 自動導航可嘗試\
 -> [光流](https://ieeexplore.ieee.org/document/10964683)
 
-以下缺乏設備，暫時不考慮\
+* 以下缺乏設備，暫時不考慮\
 -> EGO-Planner\
 -> GAAS (Generic Autonomous Aviation System)\
 -> Vision-Based Drone Obstacle Avoidance by DRL

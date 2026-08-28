@@ -7,16 +7,9 @@ from core.drone_controller import DroneController
 from core.ui_controller import UIController
 from behaviors.manual_control import ManualControl
 
-# from behaviors.auto_track import AutoTrackControl
 from vision.pose_tracker import BodyPoseTracker
-# from behaviors.auto_nav import AutoNavControl
 from behaviors.pose_follow import BodyFollowControl
-# from vision.color_detector import ColorDetector
-# from vision.yolo_detector import YoloDetector
-# from vision.hybrid_detector import HybridDetector
-# from behaviors.hybrid_nav import HybridNavControl
 from behaviors.balloon_hunt import BalloonHuntControl
-# from vision.balloon_digit_detector import BalloonDigitDetector
 from vision.balloon_detector_with_aruco import BalloonDetector
 from vision.fluid_explorer_vision import DepthExplorerVision
 from behaviors.fluid_explore import FluidExploreControl
@@ -50,26 +43,11 @@ class TelloApp:
                 "behavior": BalloonHuntControl(),
                 "vision": BalloonDetector()
             },
-            # {
-            #     "name": "BALLON TRACKER",
-            #     "behavior": AutoNavControl(), 
-            #     "vision": YoloDetector()
-            # },
-            # {
-            #     "name": "RANDOM EXPLORER",
-            #     "behavior": RandomExploreControl(),
-            #     "vision": DepthObstacleDetector()
-            # },
             {
                 "name": "FLUID EXPLORER",
                 "behavior": FluidExploreControl(),
                 "vision": DepthExplorerVision()
             }
-            # {
-            #     "name": "ULTIMATE APF NAV (YOLO+RAFT)",
-            #     "behavior": HybridNavControl(), 
-            #     "vision": HybridDetector()
-            # }
             # 未來擴充範例：
             # {"name": "VOICE CONTROL", "behavior": VoiceControlBehavior(), "vision": None}
         ]
@@ -132,11 +110,9 @@ class TelloApp:
             elif user_input.toggle_mode:  # 處理 Z 鍵切換
                 self.toggle_mode()
             elif user_input.reserve_key_f:  # 處理 F 鍵切換 (保留給各視覺模式自行定義)
-                if self.vision and hasattr(self.vision, 'toggle_tracking_mode'):
-                    self.vision.toggle_tracking_mode()
+                self.toggle_tracking_mode() 
             elif user_input.reserve_key_r:  # 處理 R 鍵切換 (保留給各視覺模式自行定義)  
-                if self.vision and hasattr(self.vision, 'reset_target'):
-                    self.vision.reset_target()
+                self.reset_tracking_target()
             elif user_input.quit:
                 self.shutdown()
                 break # 退出迴圈
