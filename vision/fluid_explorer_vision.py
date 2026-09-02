@@ -6,7 +6,7 @@ from vision.base import VisionProcessor, VisionData
 class DepthExplorerVision(VisionProcessor):
     def __init__(self, depth_model_path="model/yolo26/runs/detect/yolo_depth_collect/yolo26n-depth.pt"):
         print("========================================")
-        print("👁️ [系統訊息] 啟動深度視覺 (精準中央取樣/去除天花板與地板干擾)...")
+        print("[系統訊息] 啟動深度視覺 (精準中央取樣/去除天花板與地板干擾)...")
         print("========================================")
         self.depth_model = YOLO(depth_model_path)
 
@@ -25,7 +25,6 @@ class DepthExplorerVision(VisionProcessor):
 
         try:
             if hasattr(res, 'depth') and res.depth is not None:
-                # YOLO 輸出通常為公尺 (m)，乘以 100 轉換為公分 (cm)
                 depth_map = res.depth.data.cpu().numpy().squeeze() * 100.0
             elif hasattr(res, 'masks') and res.masks is not None:
                 depth_map = res.masks.data[0].cpu().numpy().squeeze() * 100.0
@@ -36,8 +35,7 @@ class DepthExplorerVision(VisionProcessor):
             if depth_map.shape[:2] != (h_img, w_img):
                 depth_map = cv2.resize(depth_map, (w_img, h_img))
 
-            # 修正取樣區域：只取畫面高度的 55% ~ 65% (一條極窄的水平雷射帶)
-            # 這樣能完美避開天花板與地板的雜訊
+            # 修正取樣區域：只取畫面高度的 55% ~ 65%
             roi_y1 = int(h_img * 0.35)
             roi_y2 = int(h_img * 0.45)
             w3 = w_img // 3

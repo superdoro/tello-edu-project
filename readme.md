@@ -128,7 +128,7 @@ classDiagram
 
 ## 檔案規劃 (暫時)
 ```
-prototype/
+dji_mini4_pro_project/
 │
 ├── main.py                # 程式唯一的進入點 (負責啟動 TelloApp)
 │

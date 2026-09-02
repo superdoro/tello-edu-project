@@ -39,7 +39,7 @@ class BalloonDetector(VisionProcessor):
         h_img, w_img = frame.shape[:2]
 
         # ==========================================
-        # 🔥 步驟 0: YOLO Depth 深度提取 (修復維度錯誤)
+        # 步驟 0: YOLO Depth 深度提取
         # ==========================================
         depth_map = None
         if self.depth_model is not None:
@@ -47,7 +47,7 @@ class BalloonDetector(VisionProcessor):
             res = results_depth[0]
             
             try:
-                # 嘗試從官方的 depth 屬性提取 (針對特製的 YOLO Depth 模型)
+                # 嘗試從官方的 depth 屬性提取
                 if hasattr(res, 'depth') and res.depth is not None:
                     depth_map = res.depth.data.cpu().numpy().squeeze()
                 # 嘗試從 masks 屬性提取 (許多魔改深度模型會將深度存在 Mask 通道)
@@ -57,7 +57,7 @@ class BalloonDetector(VisionProcessor):
                 print(f"[警告] 深度圖提取失敗: {e}")
                 depth_map = None
 
-            # 🔥 雙重防呆：確保 depth_map 絕對是 Numpy 陣列，且至少是二維 (2D)
+            # 雙重防呆：確保 depth_map 絕對是 Numpy 陣列，且至少是二維 (2D)
             if depth_map is not None and isinstance(depth_map, np.ndarray) and len(depth_map.shape) >= 2:
                 # 確保 depth_map 尺寸與原圖一致
                 if depth_map.shape[:2] != (h_img, w_img):
@@ -75,7 +75,7 @@ class BalloonDetector(VisionProcessor):
                 data.depth_R = float(np.mean(roi_R))
                 
                 # 在畫面上方印出左中右深度
-                cv2.putText(annotated_frame, f"L:{int(data.depth_L)} C:{int(data.center_depth)} R:{int(data.depth_R)}", 
+                cv2.putText(annotated_frame, f"L:{float(data.depth_L):.2f} C:{float(data.center_depth):.2f} R:{float(data.depth_R):.2f}", 
                             (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
             else:
                 # 如果模型回傳的格式不符，強制清空，避免影響後續切片
@@ -109,7 +109,7 @@ class BalloonDetector(VisionProcessor):
         # 步驟 C: 感測器融合與盲區補償
         # ==========================================
         if ids is not None:
-            flat_ids = ids.flatten() 
+            flat_ids = ids.flatten()
             
             for i, corner in enumerate(corners):
                 c = corner[0]
@@ -171,7 +171,7 @@ class BalloonDetector(VisionProcessor):
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
                             
             if depth_map is not None:
-                cv2.putText(annotated_frame, f"D: {int(best_balloon['depth'])}", (bx, by-10), 
+                cv2.putText(annotated_frame, f"D: {float(best_balloon['depth']):.2f}", (bx, by-10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 255), 2)
 
         data.annotated_frame = annotated_frame

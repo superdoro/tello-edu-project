@@ -13,6 +13,8 @@ from behaviors.balloon_hunt import BalloonHuntControl
 from vision.balloon_detector_with_aruco import BalloonDetector
 from vision.fluid_explorer_vision import DepthExplorerVision
 from behaviors.fluid_explore import FluidExploreControl
+from vision.drone_detector import DroneDetector
+from behaviors.drone_follow import DroneFollowControl
 
 class TelloApp:
     def __init__(self):
@@ -47,6 +49,11 @@ class TelloApp:
                 "name": "FLUID EXPLORER",
                 "behavior": FluidExploreControl(),
                 "vision": DepthExplorerVision()
+            },
+            {
+                "name": "DRONE FOLLOW",
+                "behavior": DroneFollowControl(),
+                "vision": DroneDetector()
             }
             # 未來擴充範例：
             # {"name": "VOICE CONTROL", "behavior": VoiceControlBehavior(), "vision": None}
