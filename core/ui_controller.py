@@ -1,7 +1,7 @@
 import pygame
 import cv2
 from dataclasses import dataclass
-from core.voice_controller import VoiceController
+# from core.voice_controller import VoiceController
 
 # ==========================================
 # 定義輸入資料結構 (Data Transfer Object)
@@ -41,7 +41,7 @@ class UIController:
     def __init__(self):
         # 初始化 Pygame 控制面板
         pygame.init()
-        self.win = pygame.display.set_mode((400, 400))
+        self.win = pygame.display.set_mode((720, 480))
         pygame.display.set_caption("Tello 控制面板")
         self.speed = 70 # 預設鍵盤控制速度
         # self.voice = VoiceController() #聲控類別
@@ -104,14 +104,19 @@ class UIController:
         顯示 OpenCV 影像並刷新 Pygame 控制面板，防止視窗當機。
         """
         if frame is not None and frame.size > 0:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-            cv2.imshow("Tello Live Video", frame)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+            # 2. 獲取影像尺寸，並將 Numpy 矩陣轉換為 Pygame 的 Surface (繪圖表面)
+            h, w = frame_rgb.shape[:2]
+            frame_surface = pygame.image.frombuffer(frame_rgb.tobytes(), (w, h), 'BGR')
             
-        cv2.waitKey(1) # OpenCV 的必要刷新指令
+            # 3. 將影像畫到 Pygame 的畫面上 (座標 0,0) 並更新顯示
+            self.win.blit(frame_surface, (0, 0))
+            pygame.display.update()
         
         # 填滿深灰色背景並更新 Pygame 視窗
-        self.win.fill((30, 30, 30))
-        pygame.display.update()
+        # self.win.fill((30, 30, 30))
+        # pygame.display.update()
         
     def teardown(self):
         """

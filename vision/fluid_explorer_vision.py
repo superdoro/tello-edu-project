@@ -1,14 +1,26 @@
 import cv2
 import numpy as np
+import torch  # 新增 PyTorch 模組
 from ultralytics import YOLO
 from vision.base import VisionProcessor, VisionData
 
 class DepthExplorerVision(VisionProcessor):
     def __init__(self, depth_model_path="model/yolo26/runs/detect/yolo_depth_collect/yolo26n-depth.pt"):
         print("========================================")
-        print("[系統訊息] 啟動深度視覺 (精準中央取樣/去除天花板與地板干擾)...")
+        print("[系統訊息] 啟動深度視覺...")
+        
+        # 偵測並啟用 NVIDIA GPU
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if self.device == 'cuda':
+            gpu_name = torch.cuda.get_device_name(0)
+            print(f"[GPU 加速啟動] YOLO 模型已載入至 {gpu_name}！")
+        else:
+            print("[警告] 未偵測到 CUDA，YOLO 仍將使用 CPU 運算。請檢查 PyTorch 安裝！")
         print("========================================")
+        
+        # 載入模型並強制搬移到指定的硬體 (GPU/CPU)
         self.depth_model = YOLO(depth_model_path)
+        self.depth_model.to(self.device)
 
     def process_frame(self, frame) -> VisionData:
         data = VisionData(is_detected=True, annotated_frame=frame)
@@ -19,10 +31,12 @@ class DepthExplorerVision(VisionProcessor):
         annotated_frame = frame.copy()
         h_img, w_img = frame.shape[:2]
 
-        results = self.depth_model(frame, verbose=False)
+        # 🔥 核心修改：在推理時明確指定 device
+        results = self.depth_model(frame, verbose=False, device=self.device)
         res = results[0]
         depth_map = None
-
+        
+        # ... 以下保留你原本的 depth_map 解析與繪圖邏輯 ...
         try:
             if hasattr(res, 'depth') and res.depth is not None:
                 depth_map = res.depth.data.cpu().numpy().squeeze() * 100.0
@@ -46,17 +60,13 @@ class DepthExplorerVision(VisionProcessor):
             data.depth_R = float(np.mean(depth_map[roi_y1:roi_y2, 2*w3:w_img]))
 
             # --- UI 繪製 ---
-            # 畫出這三個狹長的取樣框，讓你在畫面上能明確看到無人機在「看」哪裡
             cv2.rectangle(annotated_frame, (0, roi_y1), (w3, roi_y2), (255, 200, 0), 1)
             cv2.rectangle(annotated_frame, (w3, roi_y1), (2*w3, roi_y2), (0, 255, 0), 2)
             cv2.rectangle(annotated_frame, (2*w3, roi_y1), (w_img, roi_y2), (255, 200, 0), 1)
 
-            # 顯示文字資訊
             cv2.putText(annotated_frame, f"L: {int(data.depth_L)}cm", (10, roi_y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-
             color_c = (0, 255, 0) if data.depth_C > 150 else (0, 0, 255)
             cv2.putText(annotated_frame, f"C: {int(data.depth_C)}cm", (w3 + 10, roi_y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color_c, 2)
-
             cv2.putText(annotated_frame, f"R: {int(data.depth_R)}cm", (2*w3 + 10, roi_y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
         data.annotated_frame = annotated_frame

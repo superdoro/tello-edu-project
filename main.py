@@ -12,7 +12,7 @@ if __name__ == '__main__':
         
         print("   [檢查點 4] 系統已完全關閉。")
         
-    except Exception as e: 
+    except Exception as e:
         print(f"   發生 Python 錯誤: {e}")
         import traceback
         traceback.print_exc()

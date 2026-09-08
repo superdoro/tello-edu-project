@@ -1,0 +1,58 @@
+%YAML:1.0
+
+# ==========================================
+# 系統設定
+# ==========================================
+File.version: "1.0"
+
+# ==========================================
+# 相機物理參數 (注意：ORB-SLAM3 強制要求加上 1)
+# ==========================================
+Camera.type: "PinHole"
+
+Camera1.fx: 921.1707
+Camera1.fy: 922.5323
+Camera1.cx: 479.9142
+Camera1.cy: 359.8711
+
+Camera1.k1: 0.0
+Camera1.k2: 0.0
+Camera1.p1: 0.0
+Camera1.p2: 0.0
+Camera1.k3: 0.0
+
+# 這些是通用設定，不需要加 1
+Camera.width: 720
+Camera.height: 480
+Camera.fps: 10
+Camera.RGB: 1
+
+# ==========================================
+# ORB 特徵點擷取參數
+# ==========================================
+ORBextractor.nFeatures: 400
+ORBextractor.scaleFactor: 1.2
+ORBextractor.nLevels: 8
+ORBextractor.iniThFAST: 25
+ORBextractor.minThFAST: 7
+
+# ==========================================
+# 視覺化視窗參數
+# ==========================================
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1.0
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2.0
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3.0
+Viewer.ViewpointX: 0.0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500.0
+
+# ==========================================
+# 地圖存取設定 (Atlas Settings)
+# ==========================================
+# 儲存與讀取的地圖檔案名稱 (副檔名通常預設為 .osa)
+System.LoadAtlasFromFile: "tello_building_map"
+System.SaveAtlasToFile: "tello_building_map"

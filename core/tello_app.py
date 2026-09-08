@@ -9,13 +9,14 @@ from behaviors.manual_control import ManualControl
 
 from vision.pose_tracker import BodyPoseTracker
 from behaviors.pose_follow import BodyFollowControl
-from behaviors.balloon_hunt import BalloonHuntControl
-from vision.balloon_detector_with_aruco import BalloonDetector
 from vision.fluid_explorer_vision import DepthExplorerVision
 from behaviors.fluid_explore import FluidExploreControl
 from vision.drone_detector import DroneDetector
 from behaviors.drone_follow import DroneFollowControl
-
+from behaviors.building_surround import BuildingSurroundControl
+from vision.building_surround_vision import BuildingSurroundVision
+from behaviors.balloon_hunt import BalloonHuntControl
+from vision.balloon_detector_with_aruco import BalloonDetector
 class TelloApp:
     def __init__(self):
         # 初始化核心硬體與介面模組
@@ -41,19 +42,19 @@ class TelloApp:
                 "vision": BodyPoseTracker() # 自動跟追模式(手掌、胸腔定位)
             },
             {
-                "name": "BALLON HUNTER (YOLO + aruco)",
-                "behavior": BalloonHuntControl(),
-                "vision": BalloonDetector()
-            },
-            {
                 "name": "FLUID EXPLORER",
                 "behavior": FluidExploreControl(),
                 "vision": DepthExplorerVision()
             },
+            # {
+            #     "name": "SLAM EXPLORER",
+            #     "behavior": BuildingSurroundControl(),
+            #     "vision": BuildingSurroundVision()
+            # },
             {
-                "name": "DRONE FOLLOW",
-                "behavior": DroneFollowControl(),
-                "vision": DroneDetector()
+                "name": "BALLOON HUNT",
+                "behavior": BalloonHuntControl(),
+                "vision": BalloonDetector()
             }
             # 未來擴充範例：
             # {"name": "VOICE CONTROL", "behavior": VoiceControlBehavior(), "vision": None}
@@ -159,6 +160,8 @@ class TelloApp:
         """關閉程序"""
         print("[系統訊息] 正在關閉程序...")
         self.is_running = False
+        if self.vision and hasattr(self.vision, 'shutdown'):
+            self.vision.shutdown()
         self.drone.land()      # 確保先降落
         self.drone.teardown()  # 關閉無人機連線與串流
         self.ui.teardown()     # 關閉視窗
