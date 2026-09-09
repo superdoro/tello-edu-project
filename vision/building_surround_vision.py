@@ -9,18 +9,18 @@ from vision.fluid_explorer_vision import DepthExplorerVision
 
 # ==========================================
 # 獨立的 SLAM 背景工作進程 (Worker)
-# ⚠️ 必須放在最外層，避免 multiprocessing 產生 Pickling Error
+# 必須放在最外層，避免 multiprocessing 產生 Pickling Error
 # ==========================================
 def slam_worker(frame_queue, pose_queue, vocab_path, settings_path, mode="MAPPING"):
     # 啟動 ORB-SLAM3 (最後一個參數 True 代表開啟 3D 雲點視窗)
     slam = orb_slam3.ORB_SLAM3(vocab_path, settings_path, "MONOCULAR", True)
     
     if mode == "LOCALIZATION":
-        print("🗺️ [SLAM] 啟動純定位模式 (Localization Mode) - CPU 負載已釋放！")
+        print("[SLAM] 啟動純定位模式 (Localization Mode) - CPU 負載已釋放！")
         # 呼叫底層 C++ 關閉建圖執行緒，只進行畫面比對
         slam.ActivateLocalizationMode()
     else:
-        print("🗺️ [SLAM] 啟動建圖模式 (Mapping Mode) - 準備收集環境特徵...")
+        print("[SLAM] 啟動建圖模式 (Mapping Mode) - 準備收集環境特徵...")
 
     start_time = time.time()
 
@@ -47,9 +47,9 @@ def slam_worker(frame_queue, pose_queue, vocab_path, settings_path, mode="MAPPIN
             pose_queue.put((x, y, z, yaw))
 
     # ⚠️ 極度關鍵：必須正常呼叫 Shutdown，C++ 核心才會把地圖寫入硬碟
-    print("💾 [SLAM] 正在儲存地圖至硬碟，請稍候...")
+    print("[SLAM] 正在儲存地圖至硬碟，請稍候...")
     slam.Shutdown()
-    print("✅ [SLAM] 地圖儲存完成！")
+    print("[SLAM] 地圖儲存完成！")
 
 
 # ==========================================
@@ -59,7 +59,7 @@ class BuildingSurroundVision(VisionProcessor):
     # 💡 這裡新增了 run_mode 參數，方便直接從主程式切換
     def __init__(self, run_mode="MAPPING"):
         print("========================================")
-        print(f"🚀 啟動終極架構：GPU YOLO + 多進程非同步 SLAM (目前模式: {run_mode})")
+        print(f"啟動終極架構：GPU YOLO + 多進程非同步 SLAM (目前模式: {run_mode})")
         print("========================================")
 
         self.depth_vision = DepthExplorerVision()
@@ -113,6 +113,6 @@ class BuildingSurroundVision(VisionProcessor):
         return depth_data
 
     def shutdown(self):
-        print("🛑 正在安全關閉 SLAM 背景進程...")
+        print("正在安全關閉 SLAM 背景進程...")
         self.frame_queue.put(None)
         self.slam_process.join()
