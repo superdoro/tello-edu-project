@@ -13,8 +13,6 @@ from vision.fluid_explorer_vision import DepthExplorerVision
 from behaviors.fluid_explore import FluidExploreControl
 from vision.drone_detector import DroneDetector
 from behaviors.drone_follow import DroneFollowControl
-from behaviors.building_surround import BuildingSurroundControl
-from vision.building_surround_vision import BuildingSurroundVision
 from behaviors.balloon_hunt import BalloonHuntControl
 from vision.balloon_detector_with_aruco import BalloonDetector
 class TelloApp:
@@ -46,11 +44,6 @@ class TelloApp:
                 "behavior": FluidExploreControl(),
                 "vision": DepthExplorerVision()
             },
-            # {
-            #     "name": "SLAM EXPLORER",
-            #     "behavior": BuildingSurroundControl(),
-            #     "vision": BuildingSurroundVision()
-            # },
             {
                 "name": "BALLOON HUNT",
                 "behavior": BalloonHuntControl(),
@@ -81,6 +74,9 @@ class TelloApp:
 
     def toggle_mode(self):
         """切換到清單中的下一個模式 (支援無限循環切換)"""
+        # 離開模式前關閉環繞，避免切回來時無人機突然開始繞圈
+        if getattr(self.behavior, 'orbit_enabled', False):
+            self.behavior.toggle_orbit()
         self.current_mode_index = (self.current_mode_index + 1) % len(self.modes)
         print(f"[模式切換] 目前模式為: {self.current_mode['name']}")
 
@@ -99,6 +95,13 @@ class TelloApp:
             print("[追蹤目標重置/鎖定] 追蹤目標已重置/鎖定。")
         else:
             print("[追蹤目標重置/鎖定] 當前模式不支援追蹤目標重置/鎖定。")
+
+    def toggle_orbit(self):
+        """開關當前模式的環繞功能 (如果有支援的話)"""
+        if hasattr(self.behavior, 'toggle_orbit'):
+            self.behavior.toggle_orbit()
+        else:
+            print("[環繞模式] 當前模式不支援環繞功能。")
 
     def run(self):
         """啟動主迴圈"""
@@ -121,6 +124,8 @@ class TelloApp:
                 self.toggle_tracking_mode() 
             elif user_input.reserve_key_r:  # 處理 R 鍵切換 (保留給各視覺模式自行定義)  
                 self.reset_tracking_target()
+            elif user_input.reserve_key_o:  # 處理 O 鍵切換 (開關環繞模式)
+                self.toggle_orbit()
             elif user_input.quit:
                 self.shutdown()
                 break # 退出迴圈
@@ -145,6 +150,9 @@ class TelloApp:
                 text_color = (0, 255, 0) if self.vision else (0, 0, 255)
                 cv2.putText(frame, f"Mode: {self.current_mode['name']}", (10, 30), 
                             cv2.FONT_HERSHEY_SIMPLEX, 1, text_color, 2)
+                if getattr(self.behavior, 'orbit_enabled', False):
+                    cv2.putText(frame, "ORBIT: ON", (10, 65),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
             
             # 5. 計算並發送飛行指令 
             # (統一將 user_input 與 vision_data 傳給當前的 behavior，由 behavior 決定如何使用)

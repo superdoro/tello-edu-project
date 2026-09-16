@@ -38,7 +38,7 @@ class FluidExploreControl(FlightBehavior):
         # 流暢弧線避障狀態機 (Smooth Arcing Walk)
         # ==========================================
         if self.state == "FORWARD":
-            fb = 60
+            fb = 50
             
             if depth_C <= self.SAFE_DIST:
                 if depth_L > depth_R:
@@ -56,7 +56,7 @@ class FluidExploreControl(FlightBehavior):
                 # 如果轉彎的弧度不夠，就取消前進改為後退
                 fb = -60
             else:
-                fb = 40 # 維持一定的前進速度，畫出弧線
+                fb = 30 # 維持一定的前進速度，畫出弧線
                 
             yv = self.turn_speed
             
@@ -68,7 +68,7 @@ class FluidExploreControl(FlightBehavior):
                 
         elif self.state == "EXIT_CURVE":
             # 延續上一狀態的弧線飛行
-            fb = 40 
+            fb = 30 
             yv = self.turn_speed
             
             # 防呆機制：如果在延續弧線的過程中，又掃到新的障礙物，立刻切回答避障模式

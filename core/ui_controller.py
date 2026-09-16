@@ -26,6 +26,7 @@ class UserInput:
     toggle_mode: bool = False # 是否要求切換模式 (如按 Z 鍵)
     reserve_key_f: bool = False # 預留功能鍵 F (可用於切換追蹤模式)
     reserve_key_r: bool = False # 預留功能鍵 R (可用於重置追蹤目標)
+    reserve_key_o: bool = False # 預留功能鍵 O (可用於開關環繞模式)
 
     # 聲音指令
     voice_command: str = ""
@@ -65,6 +66,8 @@ class UIController:
                     user_input.reserve_key_f = True
                 elif event.key == pygame.K_r:
                     user_input.reserve_key_r = True
+                elif event.key == pygame.K_o:
+                    user_input.reserve_key_o = True
                 elif event.key == pygame.K_q:
                     user_input.quit = True
                 
