@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ORB-SLAM3 資料（已移除，保留規則避免誤加回版控）
+Vocabulary/
+maps/
+trajectories/
+*.osa
