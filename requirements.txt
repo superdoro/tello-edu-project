@@ -1,0 +1,57 @@
+# ==========================================================
+# Tello EDU 專案相依套件
+#
+# 版本取自實際運作的 conda 環境 UAV (Python 3.10.21)：
+#     conda create -n UAV python=3.10
+#     conda activate UAV
+#     pip install -r requirements.txt
+#
+#torch / torchvision 請先單獨安裝對應 CUDA 版本，再跑這個檔案。
+#    本機實測環境為 CUDA 13.0 (torch 2.14.0+cu130)：
+#        pip install torch==2.14.0 torchvision==0.29.0 \
+#            --index-url https://download.pytorch.org/whl/cu130
+#    直接從 PyPI 裝會拿到 CPU 版，FLUID EXPLORER 的深度推論會慢到無法飛行。
+# ==========================================================
+
+# --- 無人機硬體通訊 ---
+djitellopy==2.5.0
+
+# --- 鍵盤輸入與畫面顯示 ---
+pygame==2.6.1
+
+# --- 影像處理 (cv2.aruco 在 OpenCV 4.7+ 已併入主套件，不需要 contrib 版) ---
+opencv-python==5.0.0.93
+
+# --- 數值運算 ---
+numpy==2.2.6
+
+# --- 深度學習推論 (見檔頭的 CUDA 安裝說明) ---
+torch==2.14.0
+torchvision==0.29.0
+
+# --- YOLO 模型 (pose / depth / 氣球 / 無人機偵測) ---
+ultralytics==8.4.142
+
+# --- ByteTrack 目標鎖定用的匈牙利匹配 ---
+# ⚠️ 一定要先裝好。ultralytics 找不到 lap 時會在執行中自己 pip install，
+#    而飛行時連的是 Tello 熱點、沒有外網，那個同步下載會卡住主迴圈，
+#    Tello 超過約 15 秒收不到指令就會自動降落。
+lap==0.5.13
+
+
+# ==========================================================
+# 選用：身分辨識子系統 (vision/identity/)
+# 只有啟用人臉+體態鎖定時才需要。
+# 首次使用前務必在「有網路」的環境執行一次權重預熱：
+#     python utils/identity_warmup.py
+# 飛行時連的是 Tello 熱點沒有外網，臨時下載權重會讓主迴圈卡死。
+# ==========================================================
+facenet-pytorch==2.6.0
+
+
+# ==========================================================
+# 選用：語音控制 (core/voice_controller.py)
+# 僅限 Windows —— 依賴 .NET Framework 的 System.Speech.dll，
+# 在 Linux / macOS 上 import 就會失敗，目前預設為停用狀態。
+# ==========================================================
+# pythonnet==3.1.0

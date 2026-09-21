@@ -48,6 +48,11 @@ class TelloApp:
                 "name": "BALLOON HUNT",
                 "behavior": BalloonHuntControl(),
                 "vision": BalloonDetector()
+            },
+            {
+                "name": "DRONE FOLLOW",
+                "behavior": DroneFollowControl(),
+                "vision": DroneDetector() # 空戰追蹤模式(咬住另一台無人機)
             }
             # 未來擴充範例：
             # {"name": "VOICE CONTROL", "behavior": VoiceControlBehavior(), "vision": None}
@@ -74,10 +79,15 @@ class TelloApp:
 
     def toggle_mode(self):
         """切換到清單中的下一個模式 (支援無限循環切換)"""
-        # 離開模式前關閉環繞，避免切回來時無人機突然開始繞圈
-        if getattr(self.behavior, 'orbit_enabled', False):
-            self.behavior.toggle_orbit()
+        # 離開模式前關閉環繞，避免切回來時無人機突然開始繞圈。
+        # 用 stop_orbit 而非 toggle_orbit：O 鍵是三態循環，toggle 只會換到下一個方向。
+        if hasattr(self.behavior, 'stop_orbit'):
+            self.behavior.stop_orbit()
         self.current_mode_index = (self.current_mode_index + 1) % len(self.modes)
+        # 清空新模式視覺模組的平滑/累積狀態 (例如黑區分析的 EMA)，
+        # 避免沿用上次離開該模式時的舊值做出錯誤判斷。
+        if self.vision and hasattr(self.vision, 'reset'):
+            self.vision.reset()
         print(f"[模式切換] 目前模式為: {self.current_mode['name']}")
 
     def toggle_tracking_mode(self):
@@ -102,6 +112,31 @@ class TelloApp:
             self.behavior.toggle_orbit()
         else:
             print("[環繞模式] 當前模式不支援環繞功能。")
+
+    @staticmethod
+    def draw_battery(frame, battery):
+        """
+        在畫面右上角畫出電量。
+
+        用 getTextSize 量出字寬再靠右對齊，換解析度時不會跑版。
+        顏色分級對應 Tello 的實際行為：低於 20% 該準備降落，
+        約 10% 以下它會自己強制降落。
+        """
+        if battery is None:
+            text, color = "BAT --", (160, 160, 160)
+        else:
+            text = f"BAT {battery}%"
+            if battery > 50:
+                color = (0, 255, 0)      # 綠：充足
+            elif battery >= 20:
+                color = (0, 255, 255)    # 黃：注意
+            else:
+                color = (0, 0, 255)      # 紅：該降落了
+
+        font, scale, thick = cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2
+        (tw, _), _ = cv2.getTextSize(text, font, scale, thick)
+        w_img = frame.shape[1]
+        cv2.putText(frame, text, (w_img - tw - 10, 30), font, scale, color, thick)
 
     def run(self):
         """啟動主迴圈"""
@@ -150,9 +185,15 @@ class TelloApp:
                 text_color = (0, 255, 0) if self.vision else (0, 0, 255)
                 cv2.putText(frame, f"Mode: {self.current_mode['name']}", (10, 30), 
                             cv2.FONT_HERSHEY_SIMPLEX, 1, text_color, 2)
-                if getattr(self.behavior, 'orbit_enabled', False):
-                    cv2.putText(frame, "ORBIT: ON", (10, 65),
+                # 由 behavior 自己決定要顯示什麼 (含環繞方向)，tello_app 不需要知道細節
+                orbit_text = (self.behavior.orbit_status()
+                              if hasattr(self.behavior, 'orbit_status') else None)
+                if orbit_text:
+                    cv2.putText(frame, orbit_text, (10, 65),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+
+                # 右上角電量 (讀的是背景狀態封包的快取，不會阻塞飛控)
+                self.draw_battery(frame, self.drone.get_battery())
             
             # 5. 計算並發送飛行指令 
             # (統一將 user_input 與 vision_data 傳給當前的 behavior，由 behavior 決定如何使用)

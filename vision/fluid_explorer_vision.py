@@ -3,6 +3,7 @@ import numpy as np
 import torch  # 新增 PyTorch 模組
 from ultralytics import YOLO
 from vision.base import VisionProcessor, VisionData
+from utils.dark_region import DarkRegionAnalyzer
 
 class DepthExplorerVision(VisionProcessor):
     def __init__(self, depth_model_path="model/yolo26/runs/detect/yolo_depth_collect/yolo26n-depth.pt"):
@@ -22,6 +23,15 @@ class DepthExplorerVision(VisionProcessor):
         self.depth_model = YOLO(depth_model_path)
         self.depth_model.to(self.device)
 
+        # 黑區分析器：量化畫面中的純黑比例，用來判斷深度值可不可信。
+        # 純黑牆面缺乏紋理，單目深度模型常常把它推論成「很遠」，
+        # 飛行策略若照單全收就會直接撞上去。
+        self.dark_analyzer = DarkRegionAnalyzer()
+
+    def reset(self):
+        """重置黑區平滑狀態 (切換模式或重新起飛時呼叫)"""
+        self.dark_analyzer.reset()
+
     def process_frame(self, frame) -> VisionData:
         data = VisionData(is_detected=True, annotated_frame=frame)
         data.depth_L = 999.0
@@ -30,6 +40,24 @@ class DepthExplorerVision(VisionProcessor):
 
         annotated_frame = frame.copy()
         h_img, w_img = frame.shape[:2]
+
+        # ==========================================
+        # 黑區分析 (必須在深度判讀之前做完，讓後續決策知道深度可不可信)
+        #
+        # 註：analyze() 內部走的是 BGR->HSV。Tello 的畫面實際上是 RGB，
+        #     但這裡只取用 V (明度) 與 S (飽和度) 兩個通道，兩者都不受
+        #     R/B 通道對調影響，因此不需要額外轉換。
+        # ==========================================
+        dark_info = self.dark_analyzer.analyze(frame)
+        data.dark_ratio = dark_info["ratio"]
+        data.dark_L = dark_info["L"]
+        data.dark_C = dark_info["C"]
+        data.dark_R = dark_info["R"]
+        data.depth_unreliable = dark_info["is_dark"]
+
+        # 先畫黑區遮罩，讓後面的深度取樣框疊在上層不被蓋住。
+        # 警告文字往下挪到 y=100，避開 TelloApp 畫在 (10, 30) 的模式名稱。
+        self.dark_analyzer.draw(annotated_frame, dark_info, warn_org=(10, 100))
 
         # 🔥 核心修改：在推理時明確指定 device
         results = self.depth_model(frame, verbose=False, device=self.device)
