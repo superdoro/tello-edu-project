@@ -10,3 +10,6 @@ Vocabulary/
 maps/
 trajectories/
 *.osa
+
+# 實驗錄影 (V 鍵)，檔案很大不進版控
+recordings/

@@ -15,6 +15,9 @@ from vision.drone_detector import DroneDetector
 from behaviors.drone_follow import DroneFollowControl
 from behaviors.balloon_hunt import BalloonHuntControl
 from vision.balloon_detector_with_aruco import BalloonDetector
+from vision.tissue_detector import TissueDetector
+from behaviors.tissue_charge import TissueChargeControl
+from utils.video_recorder import VideoRecorder
 class TelloApp:
     def __init__(self):
         # 初始化核心硬體與介面模組
@@ -23,6 +26,9 @@ class TelloApp:
 
         print("tello app -> 正在初始化 UI 介面...")
         self.ui = UIController()
+
+        # 實驗錄影 (V 鍵開關)，編碼與寫檔都在背景執行緒，不會拖慢飛控迴圈
+        self.recorder = VideoRecorder()
         
         # ==============================================================
         # 定義所有可用的飛行模式清單
@@ -53,6 +59,11 @@ class TelloApp:
                 "name": "DRONE FOLLOW",
                 "behavior": DroneFollowControl(),
                 "vision": DroneDetector() # 空戰追蹤模式(咬住另一台無人機)
+            },
+            {
+                "name": "TISSUE CHARGE",
+                "behavior": TissueChargeControl(),
+                "vision": TissueDetector() # 衛生紙條獵手(HSV 白色 + 長條形狀，F 鍵可看遮罩)
             }
             # 未來擴充範例：
             # {"name": "VOICE CONTROL", "behavior": VoiceControlBehavior(), "vision": None}
@@ -161,6 +172,8 @@ class TelloApp:
                 self.reset_tracking_target()
             elif user_input.reserve_key_o:  # 處理 O 鍵切換 (開關環繞模式)
                 self.toggle_orbit()
+            elif user_input.toggle_record:  # 處理 V 鍵 (開始/停止錄影)
+                self.recorder.toggle(self.current_mode['name'])
             elif user_input.quit:
                 self.shutdown()
                 break # 退出迴圈
@@ -169,8 +182,13 @@ class TelloApp:
             frame = self.drone.get_video_frame()
             vision_data = None # 預設視覺資料為空
             
+            raw_frame = None
             if frame is not None and frame.size > 0:
                 frame = cv2.resize(frame, (720, 480))
+                # 錄影用的乾淨畫面，必須在任何疊字之前複製 ——
+                # 手動模式沒有 vision，下面的疊字會直接畫在 frame 上
+                if self.recorder.recording:
+                    raw_frame = frame.copy()
                 
                 # 如果當前模式有設定 vision 模組，才進行影像分析
                 if self.vision:
@@ -195,13 +213,31 @@ class TelloApp:
                 # 右上角電量 (讀的是背景狀態封包的快取，不會阻塞飛控)
                 self.draw_battery(frame, self.drone.get_battery())
             
+            # 把真實高度附在視覺資料上，需要爬升的模式可以拿來當硬性上限
+            height = self.drone.get_height()
+            if vision_data is not None:
+                vision_data.height = height
+
             # 5. 計算並發送飛行指令 
             # (統一將 user_input 與 vision_data 傳給當前的 behavior，由 behavior 決定如何使用)
             commands = self.behavior.calculate_command(user_input, vision_data)
             
             # 使用 *commands 將 tuple (lr, fb, ud, yv) 解包傳入
             self.drone.send_movement(*commands)
-            
+
+            # 錄影：放在指令算出來之後，log 才記得到這一格實際送出去的指令
+            if raw_frame is not None:
+                lr, fb, ud, yv = commands
+                self.recorder.write(raw_frame, frame.copy(), {
+                    "mode": self.current_mode['name'],
+                    "state": getattr(self.behavior, 'state', ''),
+                    "detected": int(bool(vision_data and vision_data.is_detected)),
+                    "lr": lr, "fb": fb, "ud": ud, "yv": yv,
+                    "battery": self.drone.get_battery(),
+                    "height": height,
+                })
+                self.recorder.draw_indicator(frame)   # 只畫在螢幕上，不會進到錄影檔
+
             # 6. 顯示與刷新畫面
             self.ui.display_frame(frame)
 
@@ -209,6 +245,8 @@ class TelloApp:
         """關閉程序"""
         print("[系統訊息] 正在關閉程序...")
         self.is_running = False
+        # 先停錄影：降落是阻塞呼叫，萬一中途出事，mp4 沒收尾就會整個檔案損毀
+        self.recorder.stop()
         if self.vision and hasattr(self.vision, 'shutdown'):
             self.vision.shutdown()
         self.drone.land()      # 確保先降落

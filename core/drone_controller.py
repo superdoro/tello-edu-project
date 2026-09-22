@@ -19,6 +19,11 @@ class DroneController:
         self._battery_ts = 0.0
         self.BATTERY_POLL_SEC = 1.0   # 電量變化很慢，一秒讀一次就夠
 
+        # 高度快取 (見 get_height 的說明)
+        self._height = None
+        self._height_ts = 0.0
+        self.HEIGHT_POLL_SEC = 0.1    # 高度變化快，要讀得比電量勤
+
     def connect(self):
         """
         建立連線、獲取電量並開啟影像串流
@@ -84,6 +89,28 @@ class DroneController:
         except Exception:
             pass   # 讀不到就維持上一次的值，不要讓顯示閃爍或中斷飛行
         return self._battery
+
+    def get_height(self):
+        """
+        讀取目前高度 (公分，相對起飛點)，無法取得時回傳 None。
+
+        與 get_battery 相同，djitellopy 是從背景狀態封包讀快取，不會阻塞主迴圈。
+        用途是給需要爬升的模式當硬性高度上限 —— 視覺判斷再怎麼小心，
+        誤判一個天花板上的燈就可能一路爬上去，只有真實高度擋得住。
+        """
+        if not self.is_connected:
+            return None
+
+        now = time.time()
+        if now - self._height_ts < self.HEIGHT_POLL_SEC:
+            return self._height
+
+        self._height_ts = now
+        try:
+            self._height = int(self.drone.get_height())
+        except Exception:
+            pass   # 讀不到就沿用上一次的值
+        return self._height
 
     def get_video_frame(self):
         """
