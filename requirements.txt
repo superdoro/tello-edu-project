@@ -1,9 +1,14 @@
 # ==========================================================
 # Tello EDU 專案相依套件
 #
-# 版本取自實際運作的 conda 環境 UAV (Python 3.10.21)：
+# 版本取自實際運作的 conda 環境 UAV (Python 3.10.21)。
+# 最簡單的安裝方式是直接用 environment.yml (會一起處理 torch 的 CUDA 版本)：
+#     conda env create -f environment.yml
+#     conda activate UAV
+# 或手動：
 #     conda create -n UAV python=3.10
 #     conda activate UAV
+#     (先裝 torch，見下方)
 #     pip install -r requirements.txt
 #
 #torch / torchvision 請先單獨安裝對應 CUDA 版本，再跑這個檔案。
@@ -50,8 +55,25 @@ facenet-pytorch==2.6.0
 
 
 # ==========================================================
-# 選用：語音控制 (core/voice_controller.py)
-# 僅限 Windows —— 依賴 .NET Framework 的 System.Speech.dll，
-# 在 Linux / macOS 上 import 就會失敗，目前預設為停用狀態。
+# 離線語音指令 (core/voice_controller.py)
+# 飛行時連的是 Tello 熱點、沒有外網，所以必須用離線引擎，
+# 任何雲端語音服務在飛行中都叫不動。
+#
+# 另需下載中文模型 (壓縮檔 42MB，解開後 66MB)：
+#     curl -LO https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip
+#     unzip vosk-model-small-cn-0.22.zip -d model/vosk/
+#
+# 錄音用系統內建的 arecord (alsa-utils)，不需要 PortAudio / sounddevice
+# (那個要 sudo 裝系統套件)。沒有麥克風或沒有模型時語音會自動停用，不影響鍵盤操作。
 # ==========================================================
-# pythonnet==3.1.0
+vosk==0.3.45
+
+
+# ==========================================================
+# 選用：開發 / 實驗工具 (飛行不需要，預設不安裝)
+#   utils/voice_bench.py        語音抗噪測試：用 gTTS 合成測試語句 (首次需要網路)、PyAV 解碼
+#   utils/voice_tolerance.py    產生語音容忍表 (同上)
+#   model/yolo26/train_yoly.py  重新訓練 YOLO (tqdm 已隨 ultralytics 安裝)
+# 需要時再裝：
+#     pip install gTTS==2.5.4 av==17.1.0
+# ==========================================================

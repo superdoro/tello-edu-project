@@ -37,8 +37,20 @@ class VideoRecorder:
     QUEUE_MAX = 30          # 約 1 秒的緩衝，正常情況下幾乎不會滿
     MAX_GAP_SEC = 2.0       # 單一畫面最多重複填補的時間 (例如起飛指令阻塞時)，避免檔案暴增
 
+    # 前 11 欄是所有模式共通的；後面是飛行模式自己補的診斷欄位
+    # (由 behavior.log_fields() 提供，見 core/tello_app.py)。
+    # 不同模式補的欄位不一樣，DictWriter 用 extrasaction="ignore" + restval=""
+    # 處理多的與少的，所以分析腳本一律要用「欄名」取值，不可以用索引 ——
+    # 舊的錄影只有 11 欄，新的有 24 欄。
     LOG_FIELDS = ["t", "elapsed", "mode", "state", "detected",
-                  "lr", "fb", "ud", "yv", "battery", "height"]
+                  "lr", "fb", "ud", "yv", "battery", "height",
+                  # --- TISSUE CHARGE 的診斷欄位 ---
+                  # tw (目標框寬) 最關鍵：這個設計裡每個跟尺度有關的量都是從它導出的，
+                  # 所以 tw + bottom_y 就足以從純 log 離線重算整條控制律。
+                  "tw", "bottom_y", "dist", "cy", "err_x", "err_y", "ax",
+                  "blocked", "depth_ahead", "white", "vote", "blob_aspect",
+                  "n_conf", "n_rej",
+                  "blank"]            # 白色無紋理欄比例 L/C/R，<L R> !C 代表判定為障礙
 
     def __init__(self):
         self.recording = False
@@ -125,7 +137,8 @@ class VideoRecorder:
     def _worker(self):
         raw_w = ann_w = None
         csv_f = open(f"{self.base_name}_log.csv", "w", newline="", encoding="utf-8")
-        log = csv.DictWriter(csv_f, fieldnames=self.LOG_FIELDS, extrasaction="ignore")
+        log = csv.DictWriter(csv_f, fieldnames=self.LOG_FIELDS,
+                             extrasaction="ignore", restval="")
         log.writeheader()
 
         dt = 1.0 / self.FPS

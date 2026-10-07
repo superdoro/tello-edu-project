@@ -4,6 +4,7 @@ import torch  # 新增 PyTorch 模組
 from ultralytics import YOLO
 from vision.base import VisionProcessor, VisionData
 from utils.dark_region import DarkRegionAnalyzer
+from utils.blank_region import BlankSurfaceAnalyzer
 
 class DepthExplorerVision(VisionProcessor):
     def __init__(self, depth_model_path="model/yolo26/runs/detect/yolo_depth_collect/yolo26n-depth.pt"):
@@ -27,6 +28,8 @@ class DepthExplorerVision(VisionProcessor):
         # 純黑牆面缺乏紋理，單目深度模型常常把它推論成「很遠」，
         # 飛行策略若照單全收就會直接撞上去。
         self.dark_analyzer = DarkRegionAnalyzer()
+        # 純白無紋理的柱子/牆面同樣會被誤判成很遠 (撞過柱子)，判定到就把那一側的深度覆寫成近距離
+        self.blank_analyzer = BlankSurfaceAnalyzer()
 
     def reset(self):
         """重置黑區平滑狀態 (切換模式或重新起飛時呼叫)"""
@@ -96,6 +99,11 @@ class DepthExplorerVision(VisionProcessor):
             color_c = (0, 255, 0) if data.depth_C > 150 else (0, 0, 255)
             cv2.putText(annotated_frame, f"C: {int(data.depth_C)}cm", (w3 + 10, roi_y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color_c, 2)
             cv2.putText(annotated_frame, f"R: {int(data.depth_R)}cm", (2*w3 + 10, roi_y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+        # 白色無紋理區：深度模型看不到的白柱子/白牆，把那一側的 depth_L/C/R 覆寫成近距離
+        blank_info = self.blank_analyzer.analyze(frame)
+        self.blank_analyzer.apply(data, blank_info)
+        self.blank_analyzer.draw(annotated_frame, blank_info)
 
         data.annotated_frame = annotated_frame
         return data

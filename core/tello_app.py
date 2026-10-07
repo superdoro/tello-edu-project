@@ -2,6 +2,8 @@
 應用程式主體，負責調度硬體、介面與飛行策略。
 """
 
+import time
+
 import cv2
 from core.drone_controller import DroneController
 from core.ui_controller import UIController
@@ -19,6 +21,8 @@ from vision.tissue_detector import TissueDetector
 from behaviors.tissue_charge import TissueChargeControl
 from utils.video_recorder import VideoRecorder
 class TelloApp:
+    SLOW_LOOP_SEC = 0.3    # 單一迴圈超過這麼久就印出各階段耗時 (與看門狗門檻一致)
+
     def __init__(self):
         # 初始化核心硬體與介面模組
         print("tello app -> 正在初始化硬體控制器...")
@@ -99,6 +103,8 @@ class TelloApp:
         # 避免沿用上次離開該模式時的舊值做出錯誤判斷。
         if self.vision and hasattr(self.vision, 'reset'):
             self.vision.reset()
+        if hasattr(self.behavior, 'reset'):
+            self.behavior.reset()
         print(f"[模式切換] 目前模式為: {self.current_mode['name']}")
 
     def toggle_tracking_mode(self):
@@ -156,8 +162,13 @@ class TelloApp:
         self.drone.connect()
         
         while self.is_running:
+            # 各階段計時：迴圈一旦卡住，Tello 會繼續執行上一個指令 (撞牆過一次)，
+            # 看門狗擋得住後果，但要知道卡在哪才能根治
+            t_loop = time.time()
+
             # 2. 獲取使用者輸入
             user_input = self.ui.get_input()
+            t_input = time.time()
             
             # 3. 處理全域系統指令 (起飛、降落、退出、模式切換)
             if user_input.takeoff:
@@ -181,6 +192,7 @@ class TelloApp:
             # 4. 獲取影像並調整大小
             frame = self.drone.get_video_frame()
             vision_data = None # 預設視覺資料為空
+            t_vision = 0.0
             
             raw_frame = None
             if frame is not None and frame.size > 0:
@@ -192,12 +204,17 @@ class TelloApp:
                 
                 # 如果當前模式有設定 vision 模組，才進行影像分析
                 if self.vision:
+                    t_v0 = time.time()
                     vision_data = self.vision.process_frame(frame)
+                    t_vision = time.time() - t_v0
                     # 取出畫上骨架/辨識框的影像
                     if vision_data and vision_data.annotated_frame is not None:
                         frame = vision_data.annotated_frame
-                        # 畫上畫面正中心準星，方便對齊目標
-                        cv2.circle(frame, (360, 240), 5, (255, 0, 0), cv2.FILLED)
+                        # 畫上瞄準點，方便對齊目標。預設是畫面正中心；
+                        # 模式可以用 aim_point() 指定別的位置 (紙條模式在 75% 高度)
+                        aim = (self.behavior.aim_point()
+                               if hasattr(self.behavior, 'aim_point') else (360, 240))
+                        cv2.circle(frame, aim, 5, (255, 0, 0), cv2.FILLED)
                 
                 # 在畫面上標示目前的模式名稱 (使用綠色代表有掛載AI，紅色代表純手動)
                 text_color = (0, 255, 0) if self.vision else (0, 0, 255)
@@ -212,15 +229,30 @@ class TelloApp:
 
                 # 右上角電量 (讀的是背景狀態封包的快取，不會阻塞飛控)
                 self.draw_battery(frame, self.drone.get_battery())
+
+                # 左下角顯示最近聽到的話，讓飛手知道麥克風有在收音、聽成了什麼
+                heard = self.ui.voice.recent_text()
+                if heard:
+                    cv2.putText(frame, f"[MIC] {heard}", (10, frame.shape[0] - 40),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
+                # 語音飛行中就顯示指令與剩餘秒數 —— 不然動作太短根本看不出有沒有執行
+                voice_st = (self.behavior.voice_status()
+                            if hasattr(self.behavior, 'voice_status') else None)
+                if voice_st:
+                    cv2.putText(frame, voice_st, (10, frame.shape[0] - 65),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             
-            # 把真實高度附在視覺資料上，需要爬升的模式可以拿來當硬性上限
+            # 高度讀值只寫進 log 供事後對照，飛行邏輯不使用：
+            # Tello 的高度讀值會隨起飛點、下方的桌櫃改變 (同一個天花板讀過 130 也讀過 230)，
+            # 拿來定高或當上限會被騙著撞天花板
             height = self.drone.get_height()
-            if vision_data is not None:
-                vision_data.height = height
 
             # 5. 計算並發送飛行指令 
             # (統一將 user_input 與 vision_data 傳給當前的 behavior，由 behavior 決定如何使用)
+            t_b0 = time.time()
             commands = self.behavior.calculate_command(user_input, vision_data)
+            t_behavior = time.time() - t_b0
             
             # 使用 *commands 將 tuple (lr, fb, ud, yv) 解包傳入
             self.drone.send_movement(*commands)
@@ -228,18 +260,31 @@ class TelloApp:
             # 錄影：放在指令算出來之後，log 才記得到這一格實際送出去的指令
             if raw_frame is not None:
                 lr, fb, ud, yv = commands
-                self.recorder.write(raw_frame, frame.copy(), {
+                row = {
                     "mode": self.current_mode['name'],
                     "state": getattr(self.behavior, 'state', ''),
                     "detected": int(bool(vision_data and vision_data.is_detected)),
                     "lr": lr, "fb": fb, "ud": ud, "yv": yv,
                     "battery": self.drone.get_battery(),
                     "height": height,
-                })
+                }
+                # 由 behavior 自己決定要多記哪些診斷欄位 —— 與 orbit_status() /
+                # voice_status() 同一個模式，tello_app 不需要知道各模式的細節。
+                # 多出來的欄位會被 DictWriter 的 extrasaction="ignore" 濾掉，
+                # 所以新模式加欄位時記得同步加進 VideoRecorder.LOG_FIELDS。
+                if hasattr(self.behavior, 'log_fields'):
+                    row.update(self.behavior.log_fields())
+                self.recorder.write(raw_frame, frame.copy(), row)
                 self.recorder.draw_indicator(frame)   # 只畫在螢幕上，不會進到錄影檔
 
             # 6. 顯示與刷新畫面
             self.ui.display_frame(frame)
+
+            t_total = time.time() - t_loop
+            if t_total > self.SLOW_LOOP_SEC:
+                print(f"[迴圈過慢] {t_total:.2f}s  輸入/語音 {t_input - t_loop:.2f}  "
+                      f"視覺 {t_vision:.2f}  決策 {t_behavior:.2f}  "
+                      f"其他(取像/疊字/錄影/顯示) {t_total - (t_input - t_loop) - t_vision - t_behavior:.2f}")
 
     def shutdown(self):
         """關閉程序"""

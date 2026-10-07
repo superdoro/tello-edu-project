@@ -4,7 +4,7 @@ from ultralytics import YOLO
 from vision.base import VisionProcessor, VisionData
 
 class DroneDetector(VisionProcessor):
-    def __init__(self, yolo_model_path="model/yolo26/runs/detect/yolo_drone_collect/best.pt"):
+    def __init__(self, yolo_model_path="model/yolo26/runs/detect/yolo_drone_collect/epoch30.pt"):
         print("========================================")
         print("[系統訊息] 啟動無人機獵手視覺模組...")
         print("========================================")

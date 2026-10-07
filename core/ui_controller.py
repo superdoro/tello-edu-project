@@ -1,11 +1,10 @@
 import pygame
 import cv2
 from dataclasses import dataclass
-# from core.voice_controller import VoiceController
+from core.voice_controller import VoiceController
 
 # ==========================================
 # 定義輸入資料結構 (Data Transfer Object)
-# 聲音功能暫時移除(因為聲控功能尚不完善)
 # ==========================================
 @dataclass
 class UserInput:
@@ -46,7 +45,10 @@ class UIController:
         self.win = pygame.display.set_mode((720, 480))
         pygame.display.set_caption("Tello 控制面板")
         self.speed = 70 # 預設鍵盤控制速度
-        # self.voice = VoiceController() #聲控類別
+
+        # 聲控。沒有麥克風或沒有模型時會自動停用 (available=False)，
+        # get_command() 一律回空字串，不影響鍵盤操作。
+        self.voice = VoiceController()
 
     def get_input(self) -> UserInput:
         """
@@ -93,16 +95,20 @@ class UIController:
         if keys[pygame.K_a]: user_input.yv = -self.speed
         elif keys[pygame.K_d]: user_input.yv = self.speed
 
-        # cmd = self.voice.get_command()
-        # if cmd:
-        #     print(f"🎤 [語音辨識] 聽到指令: {cmd}")
-        #     user_input.voice_command = cmd
-            
-            # 處理系統級別的語音指令
-            # if "起飛" in cmd: user_input.takeoff = True
-            # if "降落" in cmd: user_input.land = True
-            # elif "切換" in cmd: user_input.toggle_mode = True
-            
+        # 3. 語音指令。放在鍵盤之後：上面的鍵盤欄位已經填好，
+        #    語音只補上鍵盤沒按的部分，實體按鍵永遠優先。
+        cmd = self.voice.get_command()
+        if cmd:
+            user_input.voice_command = cmd
+            # 系統級指令直接對應到既有的旗標，與按鍵走同一條路徑
+            if cmd == "起飛":
+                user_input.takeoff = True
+            elif cmd == "降落":
+                user_input.land = True
+            elif cmd == "切換":
+                user_input.toggle_mode = True
+            # 其餘方向指令留在 voice_command 裡，由 ManualControl 轉成速度
+
         return user_input
 
     def display_frame(self, frame):
@@ -129,5 +135,6 @@ class UIController:
         安全關閉所有視窗並結束引擎。
         """
         print("[系統訊息] 正在關閉介面與視窗...")
+        self.voice.teardown()
         pygame.quit()
         cv2.destroyAllWindows()

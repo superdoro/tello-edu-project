@@ -1,5 +1,6 @@
 from djitellopy import tello
 import logging
+import threading
 import time
 
 class DroneController:
@@ -24,6 +25,18 @@ class DroneController:
         self._height_ts = 0.0
         self.HEIGHT_POLL_SEC = 0.1    # 高度變化快，要讀得比電量勤
 
+        # --- 指令看門狗 (見 _watchdog) ---
+        # Tello 會一直執行最後收到的 rc 指令，直到收到新的為止。
+        # 2026-10-05 實測：主迴圈卡住 2.56 秒，最後一個指令是 fb=50，
+        # 無人機就這樣直直飛了 2.5 秒撞上牆。主迴圈卡住的原因不只一種
+        # (模型推論、系統排程、I/O)，所以在這一層統一擋：超過 WATCHDOG_SEC
+        # 沒收到新指令，就由背景執行緒送一次 rc 0 0 0 0 讓它懸停。
+        self.WATCHDOG_SEC = 0.3
+        self._rc_lock = threading.Lock()
+        self._last_rc = (0, 0, 0, 0)
+        self._last_rc_time = time.time()
+        self._watchdog_thread = None
+
     def connect(self):
         """
         建立連線、獲取電量並開啟影像串流
@@ -39,6 +52,9 @@ class DroneController:
             # 開啟影像串流
             self.drone.streamon()
             print("[系統訊息] 影像串流已啟動。")
+
+            self._watchdog_thread = threading.Thread(target=self._watchdog, daemon=True)
+            self._watchdog_thread.start()
             
         except Exception as e:
             print(f"[錯誤] 連線失敗，請檢查 Wi-Fi 是否確實連上 TELLO-XXXXXX。詳細錯誤: {e}")
@@ -63,7 +79,30 @@ class DroneController:
         :param yv: 旋轉 (Yaw Velocity) [-100~100]
         """
         if self.is_connected:
-            self.drone.send_rc_control(lr, fb, ud, yv)
+            with self._rc_lock:
+                self.drone.send_rc_control(lr, fb, ud, yv)
+                self._last_rc = (lr, fb, ud, yv)
+                self._last_rc_time = time.time()
+
+    def _watchdog(self):
+        """
+        背景：主迴圈超過 WATCHDOG_SEC 沒送新指令、而最後一個指令不是靜止，就送一次懸停。
+
+        只送一次 (送完把 _last_rc 記成靜止)，主迴圈恢復後下一格就會蓋掉，
+        所以起飛、降落這類正常會阻塞的指令也不受影響。
+        """
+        while self.is_connected:
+            time.sleep(0.05)
+            with self._rc_lock:
+                stale = time.time() - self._last_rc_time
+                if stale <= self.WATCHDOG_SEC or self._last_rc == (0, 0, 0, 0):
+                    continue
+                try:
+                    self.drone.send_rc_control(0, 0, 0, 0)
+                except Exception:
+                    pass
+                print(f"[看門狗] 主迴圈 {stale:.2f} 秒沒有新指令 (最後是 {self._last_rc}) -> 懸停")
+                self._last_rc = (0, 0, 0, 0)
 
     def get_battery(self):
         """

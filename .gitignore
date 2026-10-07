@@ -13,3 +13,23 @@ trajectories/
 
 # 實驗錄影 (V 鍵)，檔案很大不進版控
 recordings/
+
+# 語音模型 (66MB，依 requirements.txt 的說明自行下載)
+model/vosk/
+
+# 測試與工具的快取 (都可以重新產生)
+.pytest_cache/
+utils/.voice_bench_cache/
+utils/.voice_tolerance_corpus.json
+
+# 身分辨識的特徵庫 (人臉特徵屬於個人資料，不上傳)
+data/
+
+# YOLO 訓練中途的 checkpoint：程式沒有用到，留在本機即可
+model/yolo26/runs/detect/*/epoch*.pt
+# 例外：無人機偵測目前載入的就是 epoch30 (vision/drone_detector.py)
+!model/yolo26/runs/detect/yolo_drone_collect/epoch30.pt
+
+# 本機工具設定與無關的檔案
+.claude/settings.local.json
+get-docker.sh

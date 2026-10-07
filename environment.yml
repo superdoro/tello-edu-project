@@ -1,0 +1,23 @@
+# ==========================================================
+# Tello EDU 專案的 conda 環境 (與 requirements.txt 同一套版本)
+#
+#     conda env create -f environment.yml
+#     conda activate UAV
+#
+# torch / torchvision 會從 PyTorch 的 CUDA 13.0 套件庫安裝 (開發機實測：
+# RTX 3050 Ti、torch 2.14.0+cu130)。顯示卡驅動不支援 CUDA 13 的話，
+# 把下面的 cu130 改成對應版本 (例如 cu126)，並把 requirements.txt 裡
+# torch / torchvision 的版本改成該套件庫有提供的版本。
+# 沒有 NVIDIA 顯示卡也裝得起來，但會是 CPU 版，深度推論會慢到無法飛行。
+#
+# 離線語音另外需要 Vosk 中文模型，YOLO 權重已經放在 repo 裡，詳見 readme.md。
+# ==========================================================
+name: UAV
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu130
+      - -r requirements.txt
