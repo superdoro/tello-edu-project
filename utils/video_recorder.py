@@ -53,7 +53,11 @@ class VideoRecorder:
                   "blocked", "depth_ahead", "white", "target", "avoid", "parallax", "vote", "blob_aspect",
                   "judged", "sw", "cls",     # 0 = 還沒判斷 (接近 / 判斷中)；紙條厚度 px (dist 的依據)；模型類別
                   "n_conf", "n_rej",
-                  "blank"]            # 白色無紋理欄比例 L/C/R，<L R> !C 代表判定為障礙
+                  "blank",            # 白色無紋理欄比例 L/C/R，<L R> !C 代表判定為障礙
+                  # --- PLATE READER 的診斷欄位 (dist / err_x / err_y 與上面共用) ---
+                  # hold = 已經停穩幾秒；sharp = 截圖清晰度 (Laplacian 變異數)；aspect = 框的長寬比
+                  # (斜看時變小)；ocr = 最近一次 OCR 原始結果；ocr_votes = 票數；plate = 最後讀出的號碼
+                  "plate_w", "hold", "sharp", "aspect", "ocr", "ocr_votes", "plate"]
 
     def __init__(self):
         self.recording = False

@@ -2,7 +2,7 @@
 
 以 DJI Tello EDU 為平台的視覺自主飛行實驗專案。電腦端負責所有運算 (YOLO 偵測、單目深度、語音辨識)，
 無人機只回傳影像、接收 rc 速度指令。除了鍵盤 / 語音手動操作，還有手勢跟隨、深度漫遊避障、
-氣球獵手、無人機跟隨、衛生紙條衝撞等自動模式，用 `Z` 鍵依序切換。
+氣球獵手、無人機跟隨、衛生紙條衝撞、車牌辨識等自動模式，用 `Z` 鍵依序切換。
 
 ## 飛行模式
 
@@ -14,6 +14,7 @@
 | BALLOON HUNT | 依編號搜尋並攻擊氣球 (ArUco 標籤補償) | `vision/balloon_detector_with_aruco.py` | `yolo_ballon_collect/best.pt` + 深度 |
 | DRONE FOLLOW | 跟隨另一台無人機 | `vision/drone_detector.py` | `yolo_drone_collect/epoch30.pt` |
 | TISSUE CHARGE | 漫遊找天花板垂下的衛生紙條並衝撞 (可選白色 / 彩色) | `vision/tissue_detector.py` | `yolo_tissue_collect/best.pt` + 深度 |
+| PLATE READER | 漫遊找車牌，靠近、停穩後用 OCR 讀出號碼 | `vision/plate_detector.py` | 車牌模型 / OCR 待提供 (目前用 ArUco 替身) + 深度 |
 
 權重路徑都在 `model/yolo26/runs/detect/` 底下，已經放在 repo 裡，clone 下來就能用 (見[模型權重](#模型權重))。
 
@@ -76,8 +77,8 @@ python utils/identity_warmup.py
 | `A` / `D` | 機頭左轉 / 右轉 |
 | `Z` | 切換飛行模式 (依上表順序循環) |
 | `V` | 開始 / 停止錄影 (見[錄影與飛行紀錄](#錄影與飛行紀錄)) |
-| `F` | 模式專用：HAND TRACKER 切換「胸腔鎖定 / 手部指揮」；TISSUE CHARGE 顯示被擋掉的偵測 |
-| `R` | 模式專用：HAND TRACKER 循環鎖定畫面中的人；TISSUE CHARGE 放棄目前鎖定的紙條 |
+| `F` | 模式專用：HAND TRACKER 切換「胸腔鎖定 / 手部指揮」；TISSUE CHARGE / PLATE READER 顯示被擋掉的偵測 |
+| `R` | 模式專用：HAND TRACKER 循環鎖定畫面中的人；TISSUE CHARGE 放棄目前鎖定的紙條；PLATE READER 讀完後重讀 / 接近中放棄這個車牌 |
 | `O` | HAND TRACKER 環繞：關閉 → 逆時針 → 順時針 → 關閉 |
 | `C` | TISSUE CHARGE 切換要撞的紙條：全白 ↔ 彩色 (預設全白) |
 
@@ -209,6 +210,67 @@ python utils/identity_warmup.py
 - `F` 顯示被擋掉的偵測 (灰色 = 信心不足、橘色 = 形狀不符)，現場調門檻時用；
   `R` 放棄目前鎖定的紙條並暫時列入黑名單。
 
+## PLATE READER (車牌辨識) 使用說明
+
+流程：`SEARCH` 漫遊找車牌 → `APPROACH` 對準並靠近 → `HOLD` 停穩計時 → `READ` OCR 讀號碼 → `DONE` 懸停顯示結果。
+
+- **車牌偵測模型與 OCR 還沒提供**，目前用 ArUco 標籤當假車牌 (見下面「測試替身」)。飛行邏輯只依賴
+  `vision/plate_backends.py` 的兩個介面，換成真的模型時不用改其他程式 (見「插上提供的模型」)。
+- **搜尋**：整段交給 FLUID EXPLORER 的漫遊避障 (與 TISSUE CHARGE 相同)，漫遊時**高度鎖定**。
+  請先手動飛到大約車牌的高度 (離地 40~70cm) 再按 `Z` 切進這個模式。
+- **接近**：偵測器連續看到同一個車牌 3 格才去接近 (擋單格誤判)。轉機頭對準水平，
+  **自動上下對準**垂直 (限速 25、死區 20px、只用當格真的看到的車牌)，依估距前進或後退，停在車牌前 70cm
+  (`PlateReadControl.TARGET_DIST_CM`)。估距 = 車牌實際尺寸 × 焦距 ÷ 框的大小，寬、高各算一次取較近的
+  (斜著看時框寬變小，只用寬會高估距離)。
+- **停穩才讀**：車牌在畫面中央 ±30px、距離在目標 ±15%、最近 0.5 秒框中心晃動不超過 12px，
+  連續 1 秒都成立才開始讀 (畫面中央 `HOLD 0.6s`)。超出 ±50px / ±25% 才算沒停穩 (遲滯)。
+- **讀取** (`READING 1/2`)：OCR 在背景執行緒跑，不會卡住飛控。每 0.3 秒挑最清晰的一張截圖送出，
+  同一個號碼 2 票就結束 (比對時忽略大小寫、空白與 `-`)。讀取中漂離就重新停穩，已經讀到的票保留。
+  5 秒內只有 1 票就取它但標 `?`；完全讀不出來顯示 `READ FAILED - PRESS R`。
+- **讀完** (`PLATE ABC-1234`)：原地懸停，不會自己飛走。終端機印出號碼，截圖存在
+  `recordings/plates/<時間>_<號碼>.jpg`，並記一行到 `recordings/plates/plates.csv`。
+  - `R`：重新讀取。接近 / 停穩 / 讀取中按 `R` 則是放棄這個車牌 (3 秒內不再鎖定)。
+  - 按方向鍵接手：回到漫遊，3 秒內不再鎖定 (讓你把無人機帶去下一個車牌)。
+- **跟丟**：0.25 秒內的漏偵測讓上一個指令衰減；超過 1 秒看不到就回去漫遊。20 秒還停不穩就放棄這個車牌。
+- 所有門檻都是 `behaviors/plate_read.py` 的類別常數，還沒有實飛校正過。錄影的 log 有 `dist`、`err_x/err_y`、
+  `hold` (停穩幾秒)、`sharp` (截圖清晰度)、`ocr` / `ocr_votes` / `plate`，第一趟飛完請依實際數據調整。
+- **已知限制**：
+  - 只轉機頭、不橫移，斜著接近時會停在斜角讀。框的長寬比記在 log 的 `aspect`，之後要做「正對車牌」再加。
+  - 自動下降沒有地面保護 (高度讀值不可靠)，靠限速、只用即時偵測、飛手隨時可以接手。
+
+### 測試替身：ArUco 標籤當假車牌
+
+偵測器 `ArucoPlateDetector` 用 `DICT_4X4_50` (與 BALLOON HUNT 相同)，「OCR」`ArucoIdOCR` 在截圖上重新偵測一次標籤、
+回傳 `ID<編號>` —— 截圖糊掉 (轉機頭的動態模糊) 或切掉一截就讀不到，跟真的 OCR 一樣考驗截圖品質。
+
+1. 印標籤：`utils/all_markers_A4.png` 滿版印在 A4 上，每個標籤約 8cm。8cm 的標籤在合成畫面上約 2.5 公尺外就偵測不到，
+   實飛 (壓縮、動態模糊) 會更近，漫遊不容易找到，建議把其中一個標籤單張放大印 (15~20cm)
+2. **量黑框的實際邊長**，填進 `core/tello_app.py` 的 `ArucoPlateDetector(plate_size_cm=...)` —— 停多遠完全靠這個值
+3. 貼在車牌的位置，照上面的流程飛。讀完畫面顯示 `PLATE ID2`
+
+### 插上提供的模型
+
+在 `vision/plate_backends.py` 實作兩個類別，再把 `core/tello_app.py` 裡 PLATE READER 那一組的
+`ArucoPlateDetector()` / `ArucoIdOCR()` 換掉：
+
+```python
+class MyPlateDetector(PlateDetectorBackend):
+    plate_width_cm = 32.0      # 車牌實際尺寸 (估距用)，預設台灣小客車牌 32x15cm
+    plate_height_cm = 15.0
+    def detect(self, frame):   # BGR 影像 (原生 960x720)，主迴圈裡呼叫，要快
+        return [{"box": (x1, y1, x2, y2), "conf": 0.9}]   # frame 的像素座標
+
+class MyPlateOCR(PlateOCRBackend):
+    def read(self, crop):      # BGR 車牌截圖，在背景執行緒呼叫，可以慢
+        return "ABC-1234", 0.95                           # 讀不出來回 (None, 0.0)
+```
+
+- 偵測模型是 ultralytics 的 `.pt` 的話，直接用 `YoloPlateDetector("model/yolo26/runs/detect/<資料夾>/<權重>.pt")`。
+- **色彩順序**：djitellopy 給的畫面其實是 RGB，`PlateVision` 預設會先轉成 BGR 再交給後端 (OpenCV / OCR 套件 /
+  ultralytics 都假設 BGR)。如果模型是用本專案的錄影檔訓練的 (錄影檔與串流同順序)，改成 `PlateVision(..., to_bgr=False)`。
+- OCR 套件**不可以在飛行中下載權重** (連的是 Tello 熱點，沒有外網)：請在建構時就載入，並先在有網路的環境跑過一次。
+- `detect()` 回傳的其他欄位 (例如四個角點) 會原樣帶進 `vision_data.plate`。
+
 ## 錄影與飛行紀錄
 
 按 `V` 開始 / 停止錄影，`recordings/` 底下會產生三到四個同名檔案 (資料夾不進版控)：
@@ -224,6 +286,8 @@ python utils/identity_warmup.py
 TISSUE CHARGE 的診斷欄位包含 `tw` (紙條框寬)、`bottom_y`、`cy`、`err_x/err_y` (十字與紅點的差距)、
 `depth_ahead`、`blank` (白牆判定)、`target` (當時要撞白色還是彩色)、`avoid` (擋在前進路線上、不該撞的紙條最近幾公分)、
 `judged` (0 = 還沒判斷，接近中或判斷中)、`sw` (紙條厚度 px，`dist` 就是用它換算的)、`cls` (模型類別) 等，欄位清單見 `utils/video_recorder.py` 的 `LOG_FIELDS`。
+PLATE READER 另外記 `plate_w` (車牌框寬)、`hold` (已經停穩幾秒)、`sharp` (截圖清晰度)、`aspect` (框的長寬比)、
+`ocr` (最近一次 OCR 結果)、`ocr_votes` (票數)、`plate` (最後讀出的號碼)，`dist` / `err_x` / `err_y` 與 TISSUE CHARGE 共用。
 
 ## 模型權重
 
@@ -258,6 +322,9 @@ python tests/replay_tissue.py fsm   recordings/<時間>_TISSUE_CHARGE_raw.mp4 --
 
 # 自動標註的測試 (追蹤、插值、選格、輪廓、匯出)
 python tests/test_autolabel.py
+
+# PLATE READER 狀態機、停穩判定、OCR 背景執行緒與投票、ArUco 替身、閉迴路模擬
+python tests/test_plate_read.py
 ```
 
 ### 從錄影的辨識失敗畫面產生 YOLO-seg 資料集
@@ -328,6 +395,9 @@ tello-edu-project/
 │   ├── balloon_detector_with_aruco.py  # BALLOON HUNT
 │   ├── drone_detector.py         # DRONE FOLLOW
 │   ├── tissue_detector.py        # TISSUE CHARGE
+│   ├── plate_detector.py         # PLATE READER (車牌偵測、鎖定、估距、截圖)
+│   ├── plate_backends.py         # 車牌偵測器 / OCR 介面 + ArUco 替身
+│   ├── plate_reader.py           # 非同步 OCR + 投票
 │   ├── identity/                 # 身分辨識子系統 (人臉 + 體態)
 │   └── unused module/            # 舊實驗模組，目前沒有使用
 │
@@ -339,6 +409,7 @@ tello-edu-project/
 │   ├── balloon_hunt.py           # BALLOON HUNT
 │   ├── drone_follow.py           # DRONE FOLLOW
 │   ├── tissue_charge.py          # TISSUE CHARGE
+│   ├── plate_read.py             # PLATE READER
 │   └── unused module/            # 舊實驗模組，目前沒有使用
 │
 ├── utils/                        # 共用工具與離線測試腳本

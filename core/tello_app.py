@@ -19,6 +19,10 @@ from behaviors.balloon_hunt import BalloonHuntControl
 from vision.balloon_detector_with_aruco import BalloonDetector
 from vision.tissue_detector import TissueDetector
 from behaviors.tissue_charge import TissueChargeControl
+from vision.plate_detector import PlateVision
+from vision.plate_backends import ArucoPlateDetector, ArucoIdOCR
+from vision.plate_reader import PlateReader
+from behaviors.plate_read import PlateReadControl
 from utils.video_recorder import VideoRecorder
 # 畫面超過這麼久沒更新 (影像串流凍結) -> 自動模式改成懸停 (見 stale_video_guard)
 FRAME_STALE_SEC = 0.3
@@ -82,6 +86,14 @@ class TelloApp:
                 "name": "TISSUE CHARGE",
                 "behavior": TissueChargeControl(),
                 "vision": TissueDetector() # 衛生紙條獵手(HSV 白色 + 長條形狀，F 鍵可看遮罩)
+            },
+            {
+                # 車牌辨識：漫遊找車牌 -> 靠近 -> 停穩 -> OCR。
+                # 偵測模型與 OCR 還沒提供，先用 ArUco 標籤當假車牌 (見 vision/plate_backends.py)。
+                # 換成真的模型時只要換掉 ArucoPlateDetector() / ArucoIdOCR() 這兩個後端
+                "name": "PLATE READER",
+                "behavior": PlateReadControl(reader=PlateReader(ArucoIdOCR())),
+                "vision": PlateVision(detector=ArucoPlateDetector())
             }
             # 未來擴充範例：
             # {"name": "VOICE CONTROL", "behavior": VoiceControlBehavior(), "vision": None}
@@ -132,8 +144,15 @@ class TelloApp:
 
     def reset_tracking_target(self):
         """重置 or 鎖定當前模式的追蹤目標 (如果有支援的話)"""
+        handled = False
         if self.vision and hasattr(self.vision, 'reset_target'):
             self.vision.reset_target()
+            handled = True
+        # 目標狀態在飛行邏輯裡的模式 (PLATE READER：放棄這個車牌 / 讀完後重讀) 也要通知
+        if hasattr(self.behavior, 'reset_target'):
+            self.behavior.reset_target()
+            handled = True
+        if handled:
             print("[追蹤目標重置/鎖定] 追蹤目標已重置/鎖定。")
         else:
             print("[追蹤目標重置/鎖定] 當前模式不支援追蹤目標重置/鎖定。")
