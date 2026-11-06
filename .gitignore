@@ -14,6 +14,10 @@ trajectories/
 # 實驗錄影 (V 鍵)，檔案很大不進版控
 recordings/
 
+# 自動標註的資料集與 SAM 權重 (model/yolo26/autolabel_tissue.py)，都可以重新產生
+datasets/
+model/sam/
+
 # 語音模型 (66MB，依 requirements.txt 的說明自行下載)
 model/vosk/
 

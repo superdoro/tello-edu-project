@@ -19,7 +19,7 @@ class ManualControl(FlightBehavior):
     # TISSUE CHARGE 是 2.7 秒，同一個指令在不同模式下長度差 27 倍。
     #
     # 改用真實時間計時之後，不論哪個模式、電腦快慢，持續時間都一樣。
-    # 速度 70 時大約是 70cm/s，所以 3 秒約會移動 2 公尺 —— 室內要留意空間，
+    # 速度 70 時大約是 70cm/s，所以 1.5 秒約會移動 1 公尺 —— 室內要留意空間，
     # 想看得更清楚就把秒數加大，或把速度調小讓它慢慢飛。
     VOICE_DURATION_SEC = 1.5
     VOICE_SPEED = 70
@@ -48,7 +48,7 @@ class ManualControl(FlightBehavior):
 
             self.voice_until = now + self.VOICE_DURATION_SEC
             self.voice_label = cmd
-            print(f"[手動控制] 語音「{cmd}」-> 持續 {self.VOICE_DURATION_SEC:.0f} 秒 "
+            print(f"[手動控制] 語音「{cmd}」-> 持續 {self.VOICE_DURATION_SEC:.1f} 秒 "
                   f"(lr={self.v_lr} fb={self.v_fb} ud={self.v_ud} yv={self.v_yv})")
 
         # 1. 鍵盤優先：只要有按鍵就立刻接管並中斷語音飛行

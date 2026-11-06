@@ -16,6 +16,7 @@
     python tests/replay_tissue.py dump  recordings/20260923_232845_TISSUE_CHARGE_raw.mp4
     python tests/replay_tissue.py sheet <dump.json> --times 61,62,63
     python tests/replay_tissue.py sweep <dump.json> --fp 60-67 --true 8-20,75-85
+    python tests/replay_tissue.py track recordings/<時間>_TISSUE_CHARGE_raw.mp4 --from 50 --to 56
 """
 
 import argparse
@@ -97,7 +98,7 @@ def cmd_dump(args):
         res = model(frame, verbose=False, device=device)[0]
         if res.boxes is not None:
             for box in res.boxes:
-                if int(box.cls[0]) != args.cls:
+                if args.cls >= 0 and int(box.cls[0]) != args.cls:
                     continue
                 conf = float(box.conf[0])
                 if conf < args.conf:
@@ -512,6 +513,99 @@ def cmd_fsm(args):
     return 0
 
 
+# ==========================================
+# track：逐格看鎖定紙條的估距 (紙條厚度) 穩不穩
+# ==========================================
+def cmd_track(args):
+    """
+    整個 TissueDetector 重播一段錄影。同名的 _native.mp4 在的話一起餵 (跟實飛一樣讓 YOLO 吃原生畫面)。
+    逐格印出鎖定紙條的估距 (紙條厚度)、對照用的框寬估距、還沒判斷 / 判斷中，
+    以及被 EDGE 擋掉的框；最後統計估距的逐格跳動，和每次開始判斷顏色時的距離。
+    """
+    import csv as _csv
+    import io
+    import contextlib
+    from vision.tissue_detector import TissueDetector, DIST_K
+
+    clock = {"t": 0.0}
+    with contextlib.redirect_stdout(io.StringIO()):
+        det = TissueDetector(depth_model_path=None, now_fn=lambda: clock["t"])
+    native_path = args.native
+    if not native_path and args.video.endswith("_raw.mp4"):
+        native_path = args.video[:-len("_raw.mp4")] + "_native.mp4"
+    cap = cv2.VideoCapture(args.video)
+    if not cap.isOpened():
+        print(f"打不開影片 {args.video}")
+        return 1
+    capn = cv2.VideoCapture(native_path) if native_path and os.path.exists(native_path) else None
+    print(f"影片 {args.video}" + (f"\n原生 {native_path}" if capn else "\n(沒有原生畫面，YOLO 吃 720x480)"))
+
+    rows = []
+    idx = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        if capn is not None:
+            okn, fn = capn.read()
+            if okn:
+                det.set_native_frame(fn)
+        clock["t"] = idx / FPS
+        with contextlib.redirect_stdout(io.StringIO()):
+            d = det.process_frame(frame)
+        t = d.tissue
+        rows.append({
+            "t": round(clock["t"], 2), "edge": d.n_edge,
+            "cx": t["cx"] if t else "", "dist": round(t["dist_cm"], 1) if t else "",
+            "strip_px": t["strip_px"] if t else "", "box_w": t["w"] if t else "",
+            "box_dist": round(DIST_K / max(t["w"], 1), 1) if t else "",
+            "far": int(t["far"]) if t else "", "judged": int(t["judged"]) if t else "",
+        })
+        idx += 1
+        if idx % 200 == 0:
+            print(f"\r  {idx} 格", end="", flush=True)
+    print(f"\r  共 {idx} 格")
+
+    print(f"\n{'t':>6} {'cx':>4} {'估距':>6} {'厚度':>5} {'框寬':>4} {'框寬估距':>8}  狀態")
+    for r in rows:
+        if not (args.t_from <= r["t"] <= args.t_to) or (r["dist"] == "" and not r["edge"]):
+            continue
+        if r["dist"] == "":
+            print(f"{r['t']:6.2f}  EDGE 擋掉 {r['edge']} 個")
+            continue
+        state = "已確認" if r["judged"] else ("接近中" if r["far"] else "判斷中")
+        edge = f"  (EDGE 擋掉 {r['edge']})" if r["edge"] else ""
+        print(f"{r['t']:6.2f} {r['cx']:4d} {r['dist']:6.0f} {r['strip_px']:5.1f} {r['box_w']:4d} "
+              f"{r['box_dist']:8.0f}  {state}{edge}")
+
+    # ---- 統計：同一條紙條 (相鄰格、cx 差 20px 內) 的估距逐格跳動，厚度 vs 框寬 ----
+    def jumps(key):
+        out = []
+        for a, b in zip(rows, rows[1:]):
+            if a["dist"] != "" and b["dist"] != "" and abs(a["cx"] - b["cx"]) <= 20:
+                out.append(abs(b[key] - a[key]) / max(a[key], 1e-6))
+        return sorted(out)
+    print("\n" + "=" * 70)
+    for key, name in (("dist", "厚度估距"), ("box_dist", "框寬估距")):
+        j = jumps(key)
+        if j:
+            print(f"  {name} 逐格跳動  中位數 {j[len(j) // 2]:.1%}  p90 {j[int(len(j) * 0.9)]:.1%}  "
+                  f"超過 30% 的格 {sum(x > 0.3 for x in j) / len(j):.1%}  (n={len(j)})")
+    starts = [b for a, b in zip(rows, rows[1:])
+              if b["dist"] != "" and b["far"] == 0 and b["judged"] == 0 and a["far"] != 0]
+    print(f"  開始判斷顏色 {len(starts)} 次，當時估距: "
+          + ", ".join(f"{r['t']:.1f}s {r['dist']:.0f}cm" for r in starts[:20]))
+    print(f"  EDGE 擋掉的格數: {sum(1 for r in rows if r['edge'])}")
+
+    if args.csv:
+        with open(args.csv, "w", newline="") as f:
+            wr = _csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            wr.writeheader()
+            wr.writerows(rows)
+        print(f"\n  逐格結果已寫出 {args.csv}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -520,8 +614,8 @@ def main():
     d = sub.add_parser("dump", help="跑 YOLO + 白色驗證器，倒出原始特徵")
     d.add_argument("video")
     d.add_argument("--out", default="/tmp/tissue_dump.json")
-    d.add_argument("--model", default="model/yolo26/runs/detect/yolo_tissue_collect/best_seg.pt")
-    d.add_argument("--cls", type=int, default=0)
+    d.add_argument("--model", default="model/yolo26/runs/detect/yolo_tissue_collect/best.pt")
+    d.add_argument("--cls", type=int, default=-1, help="只收這個類別，-1 = 全部 (預設)")
     d.add_argument("--conf", type=float, default=0.5)
     d.add_argument("--pad-grid", type=float, nargs="+", default=None)
     d.add_argument("--sat-grid", type=int, nargs="+", default=None)
@@ -564,6 +658,14 @@ def main():
     m.add_argument("--depth-model", default="")
     m.add_argument("--csv", default="")
     m.set_defaults(func=cmd_fsm)
+
+    k = sub.add_parser("track", help="逐格看鎖定紙條的估距 (紙條厚度) 與 EDGE 過濾")
+    k.add_argument("video", help="_raw.mp4；同名的 _native.mp4 會自動一起用")
+    k.add_argument("--native", default="", help="原生畫面影片 (預設找同名的 _native.mp4)")
+    k.add_argument("--from", dest="t_from", type=float, default=0.0, help="只印這段時間 (秒)")
+    k.add_argument("--to", dest="t_to", type=float, default=1e9)
+    k.add_argument("--csv", default="")
+    k.set_defaults(func=cmd_track)
 
     args = ap.parse_args()
     return args.func(args)

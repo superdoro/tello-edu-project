@@ -6,6 +6,11 @@ WHITE = 1
 UNKNOWN = 0
 NOT_WHITE = -1
 
+# 與目標顏色無關的通用名稱：TissueDetector 可以切換「撞白色 / 撞彩色」
+# (彩色驗證器見 utils/colour_strip.py)，投票只在乎「符不符合目前的目標」
+MATCH = WHITE
+NO_MATCH = NOT_WHITE
+
 _VERDICT_NAME = {WHITE: "WHITE", UNKNOWN: "UNKNOWN", NOT_WHITE: "NOT_WHITE"}
 
 

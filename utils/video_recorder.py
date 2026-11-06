@@ -13,8 +13,10 @@ class VideoRecorder:
     """
     實驗錄影器 (V 鍵開關)。
 
-    每次錄影會在 recordings/ 下產生三個同名檔案：
+    每次錄影會在 recordings/ 下產生三個同名檔案 (有原生畫面時是四個)：
         <時間>_<模式>_raw.mp4        乾淨畫面，沒有任何疊字 —— 拿來標註、訓練 YOLO
+        <時間>_<模式>_native.mp4     Tello 原生解析度 (960x720) 的乾淨畫面 ——
+                                     TISSUE CHARGE 的 YOLO 吃的是這個，離線重播、訓練用它才一致
         <時間>_<模式>_annotated.mp4  與螢幕上看到的一樣 (偵測框、深度、狀態) —— 拿來找問題
         <時間>_<模式>_log.csv        每一格的飛行指令與狀態 —— 對照影片看「那一刻它為什麼這樣飛」
 
@@ -43,12 +45,13 @@ class VideoRecorder:
     # 處理多的與少的，所以分析腳本一律要用「欄名」取值，不可以用索引 ——
     # 舊的錄影只有 11 欄，新的有 24 欄。
     LOG_FIELDS = ["t", "elapsed", "mode", "state", "detected",
-                  "lr", "fb", "ud", "yv", "battery", "height",
+                  "lr", "fb", "ud", "yv", "battery", "height", "frame_age",
                   # --- TISSUE CHARGE 的診斷欄位 ---
-                  # tw (目標框寬) 最關鍵：這個設計裡每個跟尺度有關的量都是從它導出的，
-                  # 所以 tw + bottom_y 就足以從純 log 離線重算整條控制律。
+                  # sw (紙條厚度 px) 最關鍵：估距 dist 與每個跟尺度有關的量都是從它導出的，
+                  # 所以 sw + bottom_y 就足以從純 log 離線重算整條控制律。tw (框寬) 留著對照用。
                   "tw", "bottom_y", "dist", "cy", "err_x", "err_y", "ax",
-                  "blocked", "depth_ahead", "white", "vote", "blob_aspect",
+                  "blocked", "depth_ahead", "white", "target", "avoid", "parallax", "vote", "blob_aspect",
+                  "judged", "sw", "cls",     # 0 = 還沒判斷 (接近 / 判斷中)；紙條厚度 px (dist 的依據)；模型類別
                   "n_conf", "n_rej",
                   "blank"]            # 白色無紋理欄比例 L/C/R，<L R> !C 代表判定為障礙
 
@@ -98,18 +101,19 @@ class VideoRecorder:
             msg += f" (佇列滿丟棄 {self.dropped} 格)"
         print(msg)
 
-    def write(self, raw, annotated, log_row):
+    def write(self, raw, annotated, log_row, native=None):
         """
         主迴圈每格呼叫一次。絕對不會阻塞：佇列滿了就丟棄這一格。
 
         :param raw: 沒有任何疊字的畫面 (呼叫端必須傳入複本，之後會在背景執行緒讀取)
         :param annotated: 有疊字的畫面 (同上，必須是複本)
         :param log_row: dict，欄位見 LOG_FIELDS
+        :param native: Tello 原生解析度的乾淨畫面 (複本)，沒有就不產生 _native.mp4
         """
         if not self.recording:
             return
         try:
-            self._queue.put_nowait((time.time(), raw, annotated, log_row))
+            self._queue.put_nowait((time.time(), raw, annotated, log_row, native))
         except queue.Full:
             self.dropped += 1
 
@@ -135,7 +139,8 @@ class VideoRecorder:
     # 背景執行緒
     # ==========================================
     def _worker(self):
-        raw_w = ann_w = None
+        raw_w = ann_w = native_w = None
+        last_native = None
         csv_f = open(f"{self.base_name}_log.csv", "w", newline="", encoding="utf-8")
         log = csv.DictWriter(csv_f, fieldnames=self.LOG_FIELDS,
                              extrasaction="ignore", restval="")
@@ -150,7 +155,13 @@ class VideoRecorder:
                 item = self._queue.get()
                 if item is None:
                     break
-                t, raw, ann, row = item
+                t, raw, ann, row, native = item
+                if native is not None:
+                    last_native = native
+                    if native_w is None:
+                        nh, nw = native.shape[:2]
+                        native_w = cv2.VideoWriter(f"{self.base_name}_native.mp4", fourcc,
+                                                   self.FPS, (nw, nh))
 
                 # 影片尺寸以第一張畫面為準
                 if raw_w is None:
@@ -171,9 +182,13 @@ class VideoRecorder:
                 while next_t <= t:
                     raw_w.write(raw)
                     ann_w.write(ann)
+                    if native_w is not None:
+                        native_w.write(last_native)   # 這一格沒有原生畫面就沿用上一張，時間軸才對得上
                     next_t += dt
         finally:
             if raw_w is not None:
                 raw_w.release()
                 ann_w.release()
+            if native_w is not None:
+                native_w.release()
             csv_f.close()

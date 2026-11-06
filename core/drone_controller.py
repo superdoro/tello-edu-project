@@ -7,6 +7,11 @@ class DroneController:
     """
     負責與 Tello 無人機進行硬體通訊、傳送飛行指令與獲取影像。
     """
+    # 影像串流設定 (見 _configure_video)。預設「不改」，沿用 Tello 的 720P / 30fps / 自動位元率。
+    # 10/19 20:21 與 20:27 兩趟設成 5Mbps 之後，畫面有 35% 的時間凍結 (每次 0.4~1.2 秒)、
+    # 出現大片色塊，兩趟都在凍結期間盲飛撞上東西。Wi-Fi 品質好的場地才考慮打開。
+    CONFIGURE_VIDEO = False
+    VIDEO_BITRATE = tello.Tello.BITRATE_5MBPS
     def __init__(self):
         # 建立 Tello 物件
         self.drone = tello.Tello()
@@ -37,6 +42,11 @@ class DroneController:
         self._last_rc_time = time.time()
         self._watchdog_thread = None
 
+        # 畫面新鮮度 (見 frame_age)：djitellopy 每解碼出一張新畫面就換一個新的陣列物件，
+        # 串流卡住時 frame_read.frame 會一直回傳同一個物件
+        self._last_frame_obj = None
+        self._last_frame_time = time.time()
+
     def connect(self):
         """
         建立連線、獲取電量並開啟影像串流
@@ -49,6 +59,10 @@ class DroneController:
             battery = self.drone.get_battery()
             print(f"[系統訊息] Tello 連線成功！當前電量: {battery}%")
             
+            # 影像串流設定要在 streamon 之前送
+            if self.CONFIGURE_VIDEO:
+                self._configure_video()
+
             # 開啟影像串流
             self.drone.streamon()
             print("[系統訊息] 影像串流已啟動。")
@@ -59,6 +73,27 @@ class DroneController:
         except Exception as e:
             print(f"[錯誤] 連線失敗，請檢查 Wi-Fi 是否確實連上 TELLO-XXXXXX。詳細錯誤: {e}")
             self.is_connected = False
+
+    def _configure_video(self):
+        """
+        影像串流設為 720P (960x720)、30fps、位元率 VIDEO_BITRATE (只有 CONFIGURE_VIDEO = True 才會呼叫)。
+
+        預設位元率是「自動」，Wi-Fi 一忙就降畫質，細細的紙條最先被壓縮雜訊吃掉
+        (邊緣糊掉、出現方塊)，YOLO 就偵測不到。5Mbps 需要比較好的 Wi-Fi 品質，
+        如果畫面開始卡頓、掉格，把 VIDEO_BITRATE 改回 BITRATE_AUTO 或 3MBPS。
+
+        這三個指令需要 Tello EDU (SDK 3.0 以上的韌體)；不支援就印警告，照常使用預設值。
+        """
+        T = tello.Tello
+        for name, setter, value in (
+                ("解析度 720P", self.drone.set_video_resolution, T.RESOLUTION_720P),
+                ("幀率 30fps", self.drone.set_video_fps, T.FPS_30),
+                ("位元率 5Mbps", self.drone.set_video_bitrate, self.VIDEO_BITRATE)):
+            try:
+                setter(value)
+                print(f"[系統訊息] 影像串流：{name}")
+            except Exception as e:
+                print(f"[警告] 影像串流設定「{name}」失敗 (韌體可能不支援)，沿用預設值：{e}")
 
     def takeoff(self):
         """控制無人機起飛"""
@@ -159,8 +194,22 @@ class DroneController:
         if self.is_connected:
             frame_read = self.drone.get_frame_read()
             if frame_read is not None:
-                return frame_read.frame
+                frame = frame_read.frame
+                if frame is not self._last_frame_obj:
+                    self._last_frame_obj = frame
+                    self._last_frame_time = time.time()
+                return frame
         return None
+
+    def frame_age(self):
+        """
+        最新畫面已經多久沒有更新 (秒)。
+
+        影像串流會卡住 (Wi-Fi 塞住、封包遺失)，這時 get_video_frame 一直回傳同一張舊畫面，
+        視覺模組照樣分析、飛行邏輯照樣下指令 —— 等於蒙著眼睛飛。
+        10/19 20:21 那趟凍結 1.0~1.2 秒期間避障一直在 -60 倒退 + 轉彎，最後撞上。
+        """
+        return time.time() - self._last_frame_time
 
     def teardown(self):
         """

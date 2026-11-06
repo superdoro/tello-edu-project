@@ -3,17 +3,49 @@ import random
 from behaviors.base import FlightBehavior
 
 class FluidExploreControl(FlightBehavior):
-    def __init__(self):
+    """
+    漫遊避障：直線前進，遇到障礙就往比較空曠的一側轉一個隨機角度，再繼續前進。
+
+    不後退。舊版前方太近時會以 fb=-60 一邊轉一邊倒退，動作劇烈，
+    而 Tello 背後沒有任何感測 (10/19 20:46 錄影漫遊時一直在快速後退)。
+    改成：還有空間就一邊慢慢前進一邊轉 (畫弧線)，太近就原地轉，任何情況都不往後退。
+    轉的角度隨機，軌跡才不會每次都一樣，能漫遊到房間各處。
+
+    狀態
+        FORWARD      直線前進
+        TURN         往比較空的一側轉隨機角度；轉完前方仍擋著就同方向再轉一次
+        DARK_ESCAPE  畫面大片純黑、深度不可信 -> 原地旋轉 + 緩慢上升
+    """
+
+    def __init__(self, now_fn=time.time, rng=None):
+        """
+        :param now_fn: 取得目前時間的函式 (離線測試時傳入假時鐘)
+        :param rng: random.Random 實例 (測試時可固定種子)，None 就用新的
+        """
+        self._now = now_fn
+        self._rng = rng if rng is not None else random.Random()
         self.state = "FORWARD"
-        self.state_start_time = time.time()
-        
+        self.state_start_time = self._now()
+
         # 距離參數設定 (公分)
         self.SAFE_DIST = 300    # 觸發避障的安全距離
         self.CLEAR_DIST = 250   # 遲滯區間 : 判定前方已經開闊的距離
-        self.CRITICAL_DIST = 150 # 極限危險距離 : 低於此距離代表弧線轉不過去，必須煞車
-        
+        self.CRITICAL_DIST = 150 # 低於此距離不再前進，改為原地轉 (不後退)
+
+        self.FORWARD_SPEED = 50
+        self.TURN_SPEED = 60          # 轉向速度
+        self.TURN_ARC_FB = 20         # 前方還有空間時，轉彎的同時慢慢前進 (畫弧線)
+        self.TURN_DEG_PER_SEC = 60.0  # rc yaw 60 約每秒 60 度 (依電量略有差異，角度只是大概)
+        self.TURN_MIN_DEG = 45
+        self.TURN_MAX_DEG = 120
+        self.SIDE_RATIO = 1.2         # 左右深度差超過這個倍數才算「有一邊比較空」，否則方向隨機
         self.turn_speed = 0
-        self.exit_curve_duration = 0.0 # 用來儲存隨機決定的出彎延遲時間
+        self.turn_sec = 0.0
+
+        # 偏好方向 (prefer_side)：例如紙條模式剛避開一條有色紙條，
+        # 接下來一段時間轉彎時優先往遠離它的方向，不要又轉回去
+        self.bias_dir = 0
+        self.bias_until = 0.0
 
         # ==========================================
         # 黑區脫困參數
@@ -28,8 +60,35 @@ class FluidExploreControl(FlightBehavior):
     def change_state(self, new_state):
         if self.state != new_state:
             self.state = new_state
-            self.state_start_time = time.time()
+            self.state_start_time = self._now()
             print(f"[狀態切換] {self.state}")
+
+    def prefer_side(self, direction, seconds):
+        """接下來 seconds 秒內，轉彎時優先往 direction (+1 右 / -1 左)"""
+        self.bias_dir = 1 if direction > 0 else -1
+        self.bias_until = self._now() + seconds
+
+    def _start_turn(self, depth_L, depth_R, depth_C, keep_dir=False):
+        """
+        決定轉向方向與隨機角度，進入 TURN。
+        方向：keep_dir 時沿用上一次；否則偏好方向還有效就用它；
+              再來是比較空的一側；兩邊差不多就隨機。
+        """
+        if not (keep_dir and self.turn_speed):
+            hi, lo = max(depth_L, depth_R), max(min(depth_L, depth_R), 1.0)
+            if self._now() < self.bias_until:
+                direction = self.bias_dir
+            elif hi / lo >= self.SIDE_RATIO:
+                direction = -1 if depth_L > depth_R else 1
+            else:
+                direction = self._rng.choice((-1, 1))
+            self.turn_speed = direction * self.TURN_SPEED
+        angle = self._rng.uniform(self.TURN_MIN_DEG, self.TURN_MAX_DEG)
+        self.turn_sec = angle / self.TURN_DEG_PER_SEC
+        side = "左" if self.turn_speed < 0 else "右"
+        print(f"遭遇障礙物 ({int(depth_C)}cm) -> 往{side}轉約 {angle:.0f} 度")
+        self.change_state("TURN")
+        self.state_start_time = self._now()    # 「再轉一次」時狀態沒變，也要重新計時
 
     def calculate_command(self, user_input, vision_data):
         if any([user_input.lr, user_input.fb, user_input.ud, user_input.yv]):
@@ -37,8 +96,8 @@ class FluidExploreControl(FlightBehavior):
             return (user_input.lr, user_input.fb, user_input.ud, user_input.yv)
 
         lr, fb, ud, yv = 0, 0, 0, 0
-        now = time.time()
-        
+        now = self._now()
+
         depth_L = getattr(vision_data, 'depth_L', 999.0)
         depth_C = getattr(vision_data, 'depth_C', 999.0)
         depth_R = getattr(vision_data, 'depth_R', 999.0)
@@ -64,7 +123,7 @@ class FluidExploreControl(FlightBehavior):
         time_in_state = now - self.state_start_time
 
         # ==========================================
-        # 流暢弧線避障狀態機 (Smooth Arcing Walk)
+        # 隨機轉向避障狀態機 (不後退)
         # ==========================================
         if self.state == "DARK_ESCAPE":
             # 深度不可信，絕不前進：只做原地旋轉 + 緩慢上升這兩個不依賴深度的動作
@@ -78,45 +137,22 @@ class FluidExploreControl(FlightBehavior):
                 self.change_state("FORWARD")
 
         elif self.state == "FORWARD":
-            fb = 50
-            
+            fb = self.FORWARD_SPEED
             if depth_C <= self.SAFE_DIST:
-                if depth_L > depth_R:
-                    self.turn_speed = -75 # 向左轉 (速度稍微調柔和，配合前進畫出漂亮弧線)
-                    print(f"遭遇障礙物 ({int(depth_C)}cm) -> 判定左側空曠，進入左弧線")
-                else:
-                    self.turn_speed = 75  # 向右轉
-                    print(f"遭遇障礙物 ({int(depth_C)}cm) -> 判定右側空曠，進入右弧線")
-                    
-                self.change_state("CURVING")
+                self._start_turn(depth_L, depth_R, depth_C)
+                time_in_state = 0.0
 
-        elif self.state == "CURVING":
-            # 弧線過彎邏輯：同時包含前進 (fb) 與 旋轉 (yv)
-            if depth_C < self.CRITICAL_DIST:
-                # 如果轉彎的弧度不夠，就取消前進改為後退
-                fb = -60
-            else:
-                fb = 30 # 維持一定的前進速度，畫出弧線
-                
+        if self.state == "TURN":
+            # 前方還有空間就邊走邊轉 (弧線)，太近就原地轉 —— 不後退
+            fb = self.TURN_ARC_FB if depth_C >= self.CRITICAL_DIST else 0
             yv = self.turn_speed
-            
-            # 當前方確認開闊，不馬上切回直線，而是進入「出彎延續」狀態
-            if depth_C > self.CLEAR_DIST:
-                self.exit_curve_duration = random.uniform(0.25, 0.75)
-                print(f"前方開闊 ({int(depth_C)}cm) -> 延續弧線 {self.exit_curve_duration:.2f} 秒創造隨機軌跡")
-                self.change_state("EXIT_CURVE")
-                
-        elif self.state == "EXIT_CURVE":
-            # 延續上一狀態的弧線飛行
-            fb = 30 
-            yv = self.turn_speed
-            
-            # 防呆機制：如果在延續弧線的過程中，又掃到新的障礙物，立刻切回答避障模式
-            if depth_C <= self.SAFE_DIST:
-                print(f"出彎時遭遇新障礙 ({int(depth_C)}cm) -> 切回過彎模式")
-                self.change_state("CURVING")
-            # 隨機延遲時間結束，完美出彎，恢復直線探索
-            elif time_in_state > self.exit_curve_duration:
-                self.change_state("FORWARD")
+            if time_in_state >= self.turn_sec:
+                if depth_C > self.CLEAR_DIST:
+                    print(f"前方開闊 ({int(depth_C)}cm) -> 繼續前進")
+                    self.change_state("FORWARD")
+                    fb, yv = self.FORWARD_SPEED, 0
+                else:
+                    # 還是擋著：同方向再轉一個隨機角度 (不左右來回)
+                    self._start_turn(depth_L, depth_R, depth_C, keep_dir=True)
 
         return (int(lr), int(fb), int(ud), int(yv))
